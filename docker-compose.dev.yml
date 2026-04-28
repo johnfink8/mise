@@ -1,0 +1,9 @@
+services:
+  app:
+    build:
+      context: .
+      target: runtime       # skip the frontend build stage
+    volumes:
+      - ./backend/app:/app/app           # hot-reload application source
+      - ./backend/alembic:/app/alembic   # pick up migration edits live
+    command: uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8080

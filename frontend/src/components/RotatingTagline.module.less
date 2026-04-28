@@ -1,0 +1,47 @@
+/* Single-line tagline that fades + lifts as it rotates through a list. */
+
+.root {
+  position: relative;
+  height: 1em;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--lobby-accent);
+  letter-spacing: -0.01em;
+
+  @media (max-width: 599px) {
+    font-size: 22px;
+  }
+}
+
+.line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.lineOut {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* Static variant — for archive pages where we show one specific line. */
+.static {
+  position: relative;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--lobby-accent);
+  letter-spacing: -0.01em;
+
+  @media (max-width: 599px) {
+    font-size: 22px;
+  }
+}

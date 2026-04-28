@@ -1,0 +1,78 @@
+.root {
+  display: flex;
+  flex-direction: column;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  gap: 16px;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--lobby-accent);
+  text-transform: uppercase;
+}
+
+.eyebrowDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lobby-accent);
+  box-shadow: 0 0 0 3px rgba(127, 220, 164, 0.18);
+  flex-shrink: 0;
+}
+
+.eyebrowDotPulsing {
+  animation: mise-pulse 1.1s ease-in-out infinite;
+}
+
+.rightLinks {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--lobby-dim);
+}
+
+.rightLink {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s;
+
+  &:hover {
+    color: var(--lobby-accent);
+  }
+}
+
+.titleBlock {
+  padding: 26px 28px 24px;
+}
+
+.wordmark {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 96px;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: var(--lobby-text);
+
+  @media (max-width: 599px) {
+    font-size: 64px;
+  }
+}
+
+.wordmarkAccent {
+  color: var(--lobby-accent);
+}

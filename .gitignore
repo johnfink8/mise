@@ -216,3 +216,52 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.log
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+.fleet/
+.zed/
+*.swp
+*.swo
+*.code-workspace
+
+# AI / agentic dev tooling (per-developer scratch + chat history)
+.claude/
+.cursor/
+.aider*
+.continue/
+.windsurf/
+.codeium/
+.history/
+
+# OS
+.DS_Store
+Thumbs.db

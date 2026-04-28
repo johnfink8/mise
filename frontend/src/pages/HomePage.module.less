@@ -1,0 +1,38 @@
+.root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--lobby-bg);
+}
+
+.body {
+  flex: 1;
+}
+
+.empty {
+  padding: 0 28px 24px;
+}
+
+.emptyText {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--lobby-dim);
+  max-width: 540px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.statusRow {
+  padding: 12px 28px 8px;
+}
+
+
+.errorAlert {
+  background: rgba(220, 90, 90, 0.08);
+  border: 1px solid rgba(220, 90, 90, 0.25);
+  color: var(--lobby-text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+}

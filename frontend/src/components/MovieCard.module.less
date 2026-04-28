@@ -1,0 +1,267 @@
+/* Movie card — "lobby card" layout. Horizontal at >=md, stacked on mobile. */
+
+.card {
+  display: flex;
+  gap: 24px;
+  padding: 28px 0;
+  border-top: 1px solid var(--lobby-border);
+  position: relative;
+
+  @media (max-width: 899px) {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+.ghostNumber {
+  position: absolute;
+  top: 16px;
+  right: -4px;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 110px;
+  font-style: italic;
+  line-height: 1;
+  color: var(--lobby-faint);
+  opacity: 0.18;
+  pointer-events: none;
+  user-select: none;
+
+  @media (max-width: 899px) {
+    right: 4px;
+  }
+}
+
+.poster {
+  width: 200px;
+  flex-shrink: 0;
+  aspect-ratio: 2/3;
+  position: relative;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+  background: var(--lobby-bg-el);
+  overflow: hidden;
+
+  @media (max-width: 899px) {
+    width: 100%;
+  }
+}
+
+.posterImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.matchBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 3px 6px;
+  background: var(--lobby-accent);
+  color: var(--lobby-accent-ink);
+  letter-spacing: 0.18em;
+  font-weight: 600;
+}
+
+.details {
+  flex: 1;
+  min-width: 0;
+  padding-top: 4px;
+  padding-right: 8px;
+  position: relative;
+  z-index: 1;
+
+  @media (max-width: 899px) {
+    padding-top: 18px;
+    padding-right: 0;
+  }
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--lobby-faint);
+  margin-bottom: 8px;
+}
+
+.eyebrowDir {
+  /* Make the director's name itself stand out from the "DIR." prefix. */
+  color: var(--lobby-text);
+  font-weight: 700;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 38px;
+  line-height: 1.0;
+  letter-spacing: -0.01em;
+  color: var(--lobby-text);
+
+  @media (max-width: 899px) {
+    font-size: 30px;
+  }
+}
+
+.year {
+  color: var(--lobby-faint);
+  font-style: italic;
+  font-size: 24px;
+  margin-left: 10px;
+
+  @media (max-width: 899px) {
+    font-size: 19px;
+  }
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--lobby-dim);
+  margin-top: 8px;
+  letter-spacing: 0.06em;
+}
+
+.synopsis {
+  margin-top: 16px;
+  max-width: 540px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--lobby-text);
+}
+
+.why {
+  margin-top: 14px;
+  padding-left: 14px;
+  border-left: 2px solid var(--lobby-accent);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--lobby-dim);
+  max-width: 540px;
+}
+
+.actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.actionsSpacer {
+  flex-grow: 1;
+}
+
+.pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lobby-text);
+  border: 1px solid var(--lobby-border);
+  font-family: var(--font-button);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  text-decoration: none;
+
+  &:hover:not(:disabled) {
+    border-color: var(--lobby-dim);
+    color: var(--lobby-text);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.pillActive {
+  background: var(--lobby-accent);
+  color: var(--lobby-accent-ink);
+  border-color: var(--lobby-accent);
+}
+
+.pillPrimary {
+  /* Filled emerald — the "Play" affordance. */
+  background: var(--lobby-accent);
+  color: var(--lobby-accent-ink);
+  border-color: var(--lobby-accent);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  &:hover:not(:disabled) {
+    background: var(--lobby-accent);
+    border-color: var(--lobby-accent);
+    opacity: 0.9;
+  }
+}
+
+.dismissBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--lobby-faint);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  transition: color 0.15s;
+
+  &:hover:not(:disabled) {
+    color: var(--lobby-text);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.footer {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--lobby-faint);
+  letter-spacing: 0.06em;
+}
+
+/* Poster-fallback (when /api/thumbs returns 404). */
+.posterFallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, var(--lobby-bg-el), var(--lobby-bg));
+  position: relative;
+}
+.posterFallbackInitials {
+  font-family: var(--font-button);
+  font-weight: 700;
+  font-size: 96px;
+  color: var(--lobby-accent);
+  opacity: 0.6;
+  letter-spacing: -0.03em;
+}
+.posterFallbackYear {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--lobby-dim);
+  letter-spacing: 0.3em;
+}
