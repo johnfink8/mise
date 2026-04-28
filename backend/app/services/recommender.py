@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db import SessionLocal
 from app.deps import get_anthropic_client
-from app.models.recommendation import Recommendation
+from app.models.recommendation import FeedbackStatus, Recommendation
 from app.models.session import Session, SessionStatus
 from app.models.tool_call import ToolCall
 from app.services.catalog_service import get_catalog_service
@@ -141,10 +141,13 @@ class Recommender:
                 await db.commit()
 
             messages: list[dict[str, Any]] = list(prior_messages)
+            feedback_note = await self._build_feedback_note()
             if initial_user_message is not None:
-                messages.append({"role": "user", "content": initial_user_message})
+                content = f"{feedback_note}\n\n{initial_user_message}" if feedback_note else initial_user_message
+                messages.append({"role": "user", "content": content})
             elif follow_up is not None:
-                messages.append({"role": "user", "content": follow_up})
+                content = f"{feedback_note}\n\n{follow_up}" if feedback_note else follow_up
+                messages.append({"role": "user", "content": content})
             else:
                 raise RuntimeError("recommender._run requires initial_user_message or follow_up")
 
@@ -332,6 +335,37 @@ class Recommender:
                 }
             )
         return out
+
+    async def _build_feedback_note(self) -> str:
+        """Return a context string summarising all feedback the user has given across
+        sessions. Deduplicates by title (most-recent rating wins) and caps at 30 entries
+        so it doesn't bloat the context window."""
+        async with SessionLocal() as db:
+            stmt = (
+                select(Recommendation)
+                .where(Recommendation.feedback != FeedbackStatus.none)
+                .order_by(Recommendation.feedback_at.desc())
+                .limit(30)
+            )
+            rows = (await db.execute(stmt)).scalars().all()
+        if not rows:
+            return ""
+        # Keep the most-recent rating per title.
+        seen: dict[str, FeedbackStatus] = {}
+        for r in rows:
+            if r.title not in seen:
+                seen[r.title] = r.feedback
+        liked = [t for t, f in seen.items() if f == FeedbackStatus.up]
+        disliked = [t for t, f in seen.items() if f == FeedbackStatus.down]
+        watched = [t for t, f in seen.items() if f == FeedbackStatus.watched]
+        parts: list[str] = []
+        if liked:
+            parts.append(f"The user liked: {', '.join(liked)}.")
+        if disliked:
+            parts.append(f"The user disliked: {', '.join(disliked)}.")
+        if watched:
+            parts.append(f"The user has already watched: {', '.join(watched)}.")
+        return "Feedback from past recommendations: " + " ".join(parts)
 
     def _build_user_prompt(
         self,
