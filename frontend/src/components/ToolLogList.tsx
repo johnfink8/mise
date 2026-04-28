@@ -1,62 +1,70 @@
-import { Fragment, useState } from 'react'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import clsx from 'clsx'
+import { Fragment, useState } from "react";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import clsx from "clsx";
 
-import css from './ToolLogList.module.less'
-import type { StreamEvent, ToolCall } from '@/types'
+import css from "./ToolLogList.module.less";
+import type { StreamEvent, ToolCall } from "@/types";
 
 export interface ToolLogEntry {
-  id: string
-  cycle: number
-  turn: number
-  toolName: string
-  toolInput: Record<string, unknown>
-  toolOutput?: Record<string, unknown> | null
-  summary?: Record<string, unknown>
-  durationMs?: number
-  state: 'pending' | 'done' | 'error'
+  id: string;
+  cycle: number;
+  turn: number;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  toolOutput?: Record<string, unknown> | null;
+  summary?: Record<string, unknown>;
+  durationMs?: number;
+  state: "pending" | "done" | "error";
 }
 
-export function eventsToToolEntries(events: StreamEvent[], cycle?: number): ToolLogEntry[] {
-  const byKey = new Map<string, ToolLogEntry>()
+export function eventsToToolEntries(
+  events: StreamEvent[],
+  cycle?: number,
+): ToolLogEntry[] {
+  const byKey = new Map<string, ToolLogEntry>();
   for (const evt of events) {
-    const evtCycle = (evt.data.cycle as number | undefined) ?? 0
-    if (cycle !== undefined && evtCycle !== cycle) continue
-    if (evt.type === 'tool_call_started') {
-      const turn = evt.data.turn as number
-      const tool = evt.data.tool_name as string
-      const input = (evt.data.tool_input as Record<string, unknown>) ?? {}
-      const key = `${evtCycle}:${turn}:${tool}:${JSON.stringify(input)}`
+    const evtCycle = (evt.data.cycle as number | undefined) ?? 0;
+    if (cycle !== undefined && evtCycle !== cycle) continue;
+    if (evt.type === "tool_call_started") {
+      const turn = evt.data.turn as number;
+      const tool = evt.data.tool_name as string;
+      const input = (evt.data.tool_input as Record<string, unknown>) ?? {};
+      const key = `${evtCycle}:${turn}:${tool}:${JSON.stringify(input)}`;
       byKey.set(key, {
         id: key,
         cycle: evtCycle,
         turn,
         toolName: tool,
         toolInput: input,
-        state: 'pending',
-      })
-    } else if (evt.type === 'tool_call_completed') {
-      const turn = evt.data.turn as number
-      const tool = evt.data.tool_name as string
-      const summary = evt.data.summary as Record<string, unknown> | undefined
-      const duration = evt.data.duration_ms as number | undefined
-      const output = evt.data.tool_output as Record<string, unknown> | null | undefined
-      const input = (evt.data.tool_input as Record<string, unknown>) ?? {}
-      let matchedKey: string | undefined
+        state: "pending",
+      });
+    } else if (evt.type === "tool_call_completed") {
+      const turn = evt.data.turn as number;
+      const tool = evt.data.tool_name as string;
+      const summary = evt.data.summary as Record<string, unknown> | undefined;
+      const duration = evt.data.duration_ms as number | undefined;
+      const output = evt.data.tool_output as
+        | Record<string, unknown>
+        | null
+        | undefined;
+      const input = (evt.data.tool_input as Record<string, unknown>) ?? {};
+      let matchedKey: string | undefined;
       for (const [k, v] of byKey.entries()) {
         if (
           v.cycle === evtCycle &&
           v.turn === turn &&
           v.toolName === tool &&
-          v.state === 'pending'
+          v.state === "pending"
         ) {
-          matchedKey = k
-          break
+          matchedKey = k;
+          break;
         }
       }
-      const key = matchedKey ?? `${evtCycle}:${turn}:${tool}:${JSON.stringify(input)}:done`
-      const existing = byKey.get(key)
+      const key =
+        matchedKey ??
+        `${evtCycle}:${turn}:${tool}:${JSON.stringify(input)}:done`;
+      const existing = byKey.get(key);
       byKey.set(key, {
         id: key,
         cycle: evtCycle,
@@ -66,11 +74,11 @@ export function eventsToToolEntries(events: StreamEvent[], cycle?: number): Tool
         toolOutput: output ?? null,
         summary,
         durationMs: duration,
-        state: 'done',
-      })
+        state: "done",
+      });
     }
   }
-  return Array.from(byKey.values())
+  return Array.from(byKey.values());
 }
 
 export function toolCallsToEntries(toolCalls: ToolCall[]): ToolLogEntry[] {
@@ -83,53 +91,59 @@ export function toolCallsToEntries(toolCalls: ToolCall[]): ToolLogEntry[] {
     toolOutput: tc.tool_output,
     summary: deriveSummary(tc.tool_output),
     durationMs: tc.duration_ms ?? undefined,
-    state: 'done',
-  }))
+    state: "done",
+  }));
 }
 
 function deriveSummary(
   output: Record<string, unknown> | null,
 ): Record<string, unknown> | undefined {
-  if (!output) return undefined
-  const summary: Record<string, unknown> = {}
-  if (typeof output.total_matches === 'number') summary.total_matches = output.total_matches
-  if (typeof output.count === 'number') summary.count = output.count
-  if (typeof output.ranked_by === 'string') summary.ranked_by = output.ranked_by
+  if (!output) return undefined;
+  const summary: Record<string, unknown> = {};
+  if (typeof output.total_matches === "number")
+    summary.total_matches = output.total_matches;
+  if (typeof output.count === "number") summary.count = output.count;
+  if (typeof output.ranked_by === "string")
+    summary.ranked_by = output.ranked_by;
   if (Array.isArray(output.results) && summary.count == null)
-    summary.count = output.results.length
-  return Object.keys(summary).length ? summary : undefined
+    summary.count = output.results.length;
+  return Object.keys(summary).length ? summary : undefined;
 }
 
 interface Props {
-  entries: ToolLogEntry[]
-  inProgress?: boolean
-  defaultOpenIdx?: number
+  entries: ToolLogEntry[];
+  inProgress?: boolean;
+  defaultOpenIdx?: number;
 }
 
-export function ToolLogList({ entries, inProgress, defaultOpenIdx = -1 }: Props) {
-  if (entries.length === 0 && !inProgress) return null
+export function ToolLogList({
+  entries,
+  inProgress,
+  defaultOpenIdx = -1,
+}: Props) {
+  if (entries.length === 0 && !inProgress) return null;
   const sorted = [...entries].sort((a, b) => {
-    if (a.cycle !== b.cycle) return a.cycle - b.cycle
-    if (a.turn !== b.turn) return a.turn - b.turn
-    return a.id.localeCompare(b.id)
-  })
+    if (a.cycle !== b.cycle) return a.cycle - b.cycle;
+    if (a.turn !== b.turn) return a.turn - b.turn;
+    return a.id.localeCompare(b.id);
+  });
   return (
     <div className={css.list}>
       {sorted.map((e, i) => (
         <ToolCallCard key={e.id} entry={e} defaultOpen={i === defaultOpenIdx} />
       ))}
-      {inProgress && sorted.every((e) => e.state !== 'pending') && (
+      {inProgress && sorted.every((e) => e.state !== "pending") && (
         <div className={css.thinkingRow}>↳ thinking…</div>
       )}
     </div>
-  )
+  );
 }
 
 function formatArgs(input: Record<string, unknown>): JSX.Element {
   const entries = Object.entries(input).filter(
-    ([, v]) => v !== undefined && v !== null && v !== '',
-  )
-  const visible = entries.slice(0, 2)
+    ([, v]) => v !== undefined && v !== null && v !== "",
+  );
+  const visible = entries.slice(0, 2);
   return (
     <>
       {visible.map(([k, v], i) => (
@@ -138,35 +152,43 @@ function formatArgs(input: Record<string, unknown>): JSX.Element {
           <span className={css.argsHi}>
             {Array.isArray(v) ? `[${v.length}]` : JSON.stringify(v)}
           </span>
-          {i < visible.length - 1 ? ', ' : ''}
+          {i < visible.length - 1 ? ", " : ""}
         </span>
       ))}
       {entries.length > 2 && <span>, …</span>}
     </>
-  )
+  );
 }
 
-function summaryPills(summary: Record<string, unknown>): Array<[string, string]> {
+function summaryPills(
+  summary: Record<string, unknown>,
+): Array<[string, string]> {
   return Object.entries(summary)
     .slice(0, 3)
-    .map(([k, v]) => [k, Array.isArray(v) ? String(v.length) : String(v)] as [string, string])
+    .map(
+      ([k, v]) =>
+        [k, Array.isArray(v) ? String(v.length) : String(v)] as [
+          string,
+          string,
+        ],
+    );
 }
 
 interface CardProps {
-  entry: ToolLogEntry
-  defaultOpen?: boolean
+  entry: ToolLogEntry;
+  defaultOpen?: boolean;
 }
 
 function ToolCallCard({ entry, defaultOpen }: CardProps) {
-  const [open, setOpen] = useState(!!defaultOpen)
-  const [tab, setTab] = useState<'input' | 'output'>('output')
-  const expandable = entry.state !== 'pending'
-  const pills = entry.summary ? summaryPills(entry.summary) : []
-  const took = entry.durationMs != null ? `${entry.durationMs}ms` : '—'
+  const [open, setOpen] = useState(!!defaultOpen);
+  const [tab, setTab] = useState<"input" | "output">("output");
+  const expandable = entry.state !== "pending";
+  const pills = entry.summary ? summaryPills(entry.summary) : [];
+  const took = entry.durationMs != null ? `${entry.durationMs}ms` : "—";
   const outputCounts =
-    entry.toolOutput && typeof entry.toolOutput === 'object'
+    entry.toolOutput && typeof entry.toolOutput === "object"
       ? deriveCounts(entry.toolOutput)
-      : null
+      : null;
 
   return (
     <div className={css.card}>
@@ -202,7 +224,7 @@ function ToolCallCard({ entry, defaultOpen }: CardProps) {
       {open && (
         <div className={css.cardBody}>
           <div className={css.tabs}>
-            {(['input', 'output'] as const).map((t) => (
+            {(["input", "output"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -213,33 +235,35 @@ function ToolCallCard({ entry, defaultOpen }: CardProps) {
               </button>
             ))}
             <span className={css.tabSpacer} />
-            {tab === 'output' && outputCounts && (
+            {tab === "output" && outputCounts && (
               <span className={css.tabCounts}>{outputCounts}</span>
             )}
           </div>
           <div className={css.cardJson}>
-            <JsonView value={tab === 'input' ? entry.toolInput : entry.toolOutput} />
+            <JsonView
+              value={tab === "input" ? entry.toolInput : entry.toolOutput}
+            />
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function deriveCounts(output: Record<string, unknown>): string | null {
-  const results = output.results
+  const results = output.results;
   if (Array.isArray(results)) {
-    const total = output.total_matches ?? output.count ?? results.length
-    return `${results.length} of ${total}`
+    const total = output.total_matches ?? output.count ?? results.length;
+    return `${results.length} of ${total}`;
   }
-  if (typeof output.count === 'number') return `${output.count}`
-  return null
+  if (typeof output.count === "number") return `${output.count}`;
+  return null;
 }
 
 // --- JsonView ---------------------------------------------------------------
 
 interface JsonViewProps {
-  value: unknown
+  value: unknown;
 }
 
 export function JsonView({ value }: JsonViewProps) {
@@ -247,29 +271,29 @@ export function JsonView({ value }: JsonViewProps) {
     <div className={css.jsonView}>
       <JNode v={value} k={null} depth={0} defaultOpen isLast />
     </div>
-  )
+  );
 }
 
 interface JNodeProps {
-  v: unknown
-  k: string | null
-  depth: number
-  defaultOpen: boolean
-  isLast: boolean
+  v: unknown;
+  k: string | null;
+  depth: number;
+  defaultOpen: boolean;
+  isLast: boolean;
 }
 
 function JNode({ v, k, depth, defaultOpen, isLast }: JNodeProps) {
-  const isObj = v && typeof v === 'object' && !Array.isArray(v)
-  const isArr = Array.isArray(v)
-  const pad = { paddingLeft: depth * 14 }
+  const isObj = v && typeof v === "object" && !Array.isArray(v);
+  const isArr = Array.isArray(v);
+  const pad = { paddingLeft: depth * 14 };
   const keyEl =
     k != null ? (
       <Fragment>
         <span className={css.jKey}>"{k}"</span>
         <span className={css.jPunct}>: </span>
       </Fragment>
-    ) : null
-  const trail = isLast ? '' : ','
+    ) : null;
+  const trail = isLast ? "" : ",";
 
   if (isObj) {
     return (
@@ -281,7 +305,7 @@ function JNode({ v, k, depth, defaultOpen, isLast }: JNodeProps) {
         defaultOpen={defaultOpen}
         trail={trail}
       />
-    )
+    );
   }
   if (isArr) {
     return (
@@ -293,7 +317,7 @@ function JNode({ v, k, depth, defaultOpen, isLast }: JNodeProps) {
         defaultOpen={defaultOpen}
         trail={trail}
       />
-    )
+    );
   }
   return (
     <div style={pad}>
@@ -301,21 +325,21 @@ function JNode({ v, k, depth, defaultOpen, isLast }: JNodeProps) {
       <JPrim v={v} />
       <span className={css.jPunct}>{trail}</span>
     </div>
-  )
+  );
 }
 
 interface JObjectProps {
-  v: Record<string, unknown>
-  keyEl: React.ReactNode
-  pad: { paddingLeft: number }
-  depth: number
-  defaultOpen: boolean
-  trail: string
+  v: Record<string, unknown>;
+  keyEl: React.ReactNode;
+  pad: { paddingLeft: number };
+  depth: number;
+  defaultOpen: boolean;
+  trail: string;
 }
 
 function JObject({ v, keyEl, pad, depth, defaultOpen, trail }: JObjectProps) {
-  const [open, setOpen] = useState(defaultOpen)
-  const entries = Object.entries(v)
+  const [open, setOpen] = useState(defaultOpen);
+  const entries = Object.entries(v);
   if (entries.length === 0) {
     return (
       <div style={pad}>
@@ -325,7 +349,7 @@ function JObject({ v, keyEl, pad, depth, defaultOpen, trail }: JObjectProps) {
           {trail}
         </span>
       </div>
-    )
+    );
   }
   return (
     <>
@@ -335,7 +359,7 @@ function JObject({ v, keyEl, pad, depth, defaultOpen, trail }: JObjectProps) {
         <span className={css.jPunct}>{`{`}</span>
         {!open && (
           <span className={css.jPunct}>
-            {' '}
+            {" "}
             {entries.length} keys {`}`}
             {trail}
           </span>
@@ -361,32 +385,30 @@ function JObject({ v, keyEl, pad, depth, defaultOpen, trail }: JObjectProps) {
         </div>
       )}
     </>
-  )
+  );
 }
 
 interface JArrayProps {
-  v: unknown[]
-  keyEl: React.ReactNode
-  pad: { paddingLeft: number }
-  depth: number
-  defaultOpen: boolean
-  trail: string
+  v: unknown[];
+  keyEl: React.ReactNode;
+  pad: { paddingLeft: number };
+  depth: number;
+  defaultOpen: boolean;
+  trail: string;
 }
 
 function JArray({ v, keyEl, pad, depth, defaultOpen, trail }: JArrayProps) {
-  const [open, setOpen] = useState(defaultOpen && depth < 1)
-  const [showAll, setShowAll] = useState(false)
+  const [open, setOpen] = useState(defaultOpen && depth < 1);
+  const [showAll, setShowAll] = useState(false);
   if (v.length === 0) {
     return (
       <div style={pad}>
         {keyEl}
-        <span className={css.jPunct}>
-          []{trail}
-        </span>
+        <span className={css.jPunct}>[]{trail}</span>
       </div>
-    )
+    );
   }
-  const allPrim = v.every((x) => x === null || typeof x !== 'object')
+  const allPrim = v.every((x) => x === null || typeof x !== "object");
   if (allPrim && v.length <= 6) {
     return (
       <div style={pad}>
@@ -400,10 +422,10 @@ function JArray({ v, keyEl, pad, depth, defaultOpen, trail }: JArrayProps) {
         ))}
         <span className={css.jPunct}>]{trail}</span>
       </div>
-    )
+    );
   }
-  const visible = showAll ? v : v.slice(0, 3)
-  const hidden = v.length - visible.length
+  const visible = showAll ? v : v.slice(0, 3);
+  const hidden = v.length - visible.length;
   return (
     <>
       <div style={pad}>
@@ -412,7 +434,7 @@ function JArray({ v, keyEl, pad, depth, defaultOpen, trail }: JArrayProps) {
         <span className={css.jPunct}>[</span>
         {!open && (
           <span className={css.jPunct}>
-            {' '}
+            {" "}
             {v.length} items ]{trail}
           </span>
         )}
@@ -430,7 +452,11 @@ function JArray({ v, keyEl, pad, depth, defaultOpen, trail }: JArrayProps) {
         ))}
       {open && hidden > 0 && (
         <div style={{ paddingLeft: (depth + 1) * 14 }}>
-          <button type="button" onClick={() => setShowAll(true)} className={css.jMore}>
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className={css.jMore}
+          >
             +{hidden} more →
           </button>
         </div>
@@ -441,23 +467,25 @@ function JArray({ v, keyEl, pad, depth, defaultOpen, trail }: JArrayProps) {
         </div>
       )}
     </>
-  )
+  );
 }
 
 function JPrim({ v }: { v: unknown }) {
-  if (v === null || v === undefined) return <span className={css.jNull}>null</span>
-  if (typeof v === 'string') return <span className={css.jString}>"{v}"</span>
-  if (typeof v === 'number') return <span className={css.jNumber}>{v}</span>
-  if (typeof v === 'boolean') return <span className={css.jBool}>{String(v)}</span>
-  return <span>{String(v)}</span>
+  if (v === null || v === undefined)
+    return <span className={css.jNull}>null</span>;
+  if (typeof v === "string") return <span className={css.jString}>"{v}"</span>;
+  if (typeof v === "number") return <span className={css.jNumber}>{v}</span>;
+  if (typeof v === "boolean")
+    return <span className={css.jBool}>{String(v)}</span>;
+  return <span>{String(v)}</span>;
 }
 
 function Toggle({
   open,
   setOpen,
 }: {
-  open: boolean
-  setOpen: (v: boolean) => void
+  open: boolean;
+  setOpen: (v: boolean) => void;
 }) {
   return (
     <button
@@ -465,7 +493,7 @@ function Toggle({
       onClick={() => setOpen(!open)}
       className={css.jToggle}
     >
-      {open ? '▾' : '▸'}
+      {open ? "▾" : "▸"}
     </button>
-  )
+  );
 }

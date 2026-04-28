@@ -7,10 +7,10 @@
   /* palette */
   --lobby-bg: #0c0b09;
   --lobby-bg-el: #15130f;
-  --lobby-border: rgba(240, 232, 217, 0.10);
+  --lobby-border: rgba(240, 232, 217, 0.1);
   --lobby-text: #f0e8d9;
   --lobby-dim: rgba(240, 232, 217, 0.55);
-  --lobby-faint: rgba(240, 232, 217, 0.30);
+  --lobby-faint: rgba(240, 232, 217, 0.3);
   --lobby-accent: #7fdca4;
   --lobby-accent-ink: #06170d;
   --lobby-error: #e09898;
@@ -45,20 +45,36 @@ body,
  * Used by the stateful eyebrow dot and the thinking-state progress bar.
  */
 @keyframes mise-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.78); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.78);
+  }
 }
 
 @keyframes mise-fade-up {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes mise-indeterminate {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(350%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
 }
-
 
 .mise-fade-up {
   animation: mise-fade-up 0.32s ease-out both;

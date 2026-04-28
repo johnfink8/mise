@@ -1,8 +1,8 @@
-import { Link } from 'react-router-dom'
-import clsx from 'clsx'
+import { Link } from "react-router-dom";
+import clsx from "clsx";
 
-import { RotatingTagline } from './RotatingTagline'
-import css from './LobbyTitle.module.less'
+import { RotatingTagline } from "./RotatingTagline";
+import css from "./LobbyTitle.module.less";
 
 interface Props {
   /**
@@ -10,16 +10,16 @@ interface Props {
    * "PAST PROGRAMMES"). The leading status dot is rendered by this
    * component — pass plain text only.
    */
-  eyebrow?: string
+  eyebrow?: string;
   /** When true, the eyebrow dot pulses (used for the "thinking" state). */
-  eyebrowPulsing?: boolean
+  eyebrowPulsing?: boolean;
   /**
    * Static tagline to render below the wordmark instead of the rotating one.
    * Used by archive pages where the line is contextual rather than evocative.
    */
-  staticTagline?: string
+  staticTagline?: string;
   /** Right-side mono links (Home / History / etc). */
-  rightLinks?: Array<{ to: string; label: string }>
+  rightLinks?: Array<{ to: string; label: string }>;
 }
 
 /**
@@ -28,7 +28,7 @@ interface Props {
  * navigation links on the right.
  */
 export function LobbyTitle({
-  eyebrow = 'MISE',
+  eyebrow = "MISE",
   eyebrowPulsing = false,
   staticTagline,
   rightLinks,
@@ -38,7 +38,10 @@ export function LobbyTitle({
       <div className={css.topBar}>
         <div className={css.eyebrow}>
           <span
-            className={clsx(css.eyebrowDot, eyebrowPulsing && css.eyebrowDotPulsing)}
+            className={clsx(
+              css.eyebrowDot,
+              eyebrowPulsing && css.eyebrowDotPulsing,
+            )}
           />
           {eyebrow}
         </div>
@@ -59,5 +62,5 @@ export function LobbyTitle({
         <RotatingTagline staticText={staticTagline} />
       </div>
     </div>
-  )
+  );
 }

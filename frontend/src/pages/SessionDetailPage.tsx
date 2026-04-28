@@ -1,129 +1,129 @@
-import { useEffect, useRef, useState } from 'react'
-import { CircularProgress, LinearProgress } from '@mui/material'
-import { useParams } from 'react-router-dom'
-import clsx from 'clsx'
+import { useEffect, useRef, useState } from "react";
+import { CircularProgress, LinearProgress } from "@mui/material";
+import { useParams } from "react-router-dom";
+import clsx from "clsx";
 
-import { ChatPanel } from '@/components/ChatPanel'
-import { LobbyTitle } from '@/components/LobbyTitle'
-import { RecommendationsList } from '@/components/RecommendationsList'
+import { ChatPanel } from "@/components/ChatPanel";
+import { LobbyTitle } from "@/components/LobbyTitle";
+import { RecommendationsList } from "@/components/RecommendationsList";
 import {
   ToolLogList,
   eventsToToolEntries,
   toolCallsToEntries,
   type ToolLogEntry,
-} from '@/components/ToolLogList'
-import {
-  useContinueSession,
-  useSession,
-  useSubmitFeedback,
-} from '@/api/hooks'
-import { openSessionStream } from '@/api/sse'
+} from "@/components/ToolLogList";
+import { useContinueSession, useSession, useSubmitFeedback } from "@/api/hooks";
+import { openSessionStream } from "@/api/sse";
 import type {
   FeedbackStatus,
   Recommendation,
   SessionStatus,
   StreamEvent,
-} from '@/types'
+} from "@/types";
 
-import css from './SessionDetailPage.module.less'
+import css from "./SessionDetailPage.module.less";
 
 const STATUS_CLASS: Record<SessionStatus, string> = {
   pending: css.statusPending,
   running: css.statusRunning,
   complete: css.statusComplete,
   error: css.statusError,
-}
+};
 
 export function SessionDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const { data, isLoading, error } = useSession(id)
-  const feedback = useSubmitFeedback()
-  const cont = useContinueSession()
+  const { id } = useParams<{ id: string }>();
+  const { data, isLoading, error } = useSession(id);
+  const feedback = useSubmitFeedback();
+  const cont = useContinueSession();
 
   // SSE wiring (same shape as HomePage) — lets the user resume the session
   // right here on the detail page.
-  const [events, setEvents] = useState<StreamEvent[]>([])
-  const [activeCycle, setActiveCycle] = useState<number | null>(null)
-  const [streamDone, setStreamDone] = useState(false)
-  const conversationEndRef = useRef<HTMLDivElement | null>(null)
+  const [events, setEvents] = useState<StreamEvent[]>([]);
+  const [activeCycle, setActiveCycle] = useState<number | null>(null);
+  const [streamDone, setStreamDone] = useState(false);
+  const conversationEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!id) return
-    setEvents([])
-    setStreamDone(false)
+    if (!id) return;
+    setEvents([]);
+    setStreamDone(false);
     const close = openSessionStream(id, (evt) => {
-      setEvents((prev) => [...prev, evt])
-      if (typeof evt.data.cycle === 'number') {
-        setActiveCycle(evt.data.cycle as number)
+      setEvents((prev) => [...prev, evt]);
+      if (typeof evt.data.cycle === "number") {
+        setActiveCycle(evt.data.cycle as number);
       }
-      if (evt.type === 'recommendations_ready' || evt.type === 'error') {
-        setStreamDone(true)
+      if (evt.type === "recommendations_ready" || evt.type === "error") {
+        setStreamDone(true);
       }
-    })
-    return close
-  }, [id])
+    });
+    return close;
+  }, [id]);
 
   useEffect(() => {
-    conversationEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [events.length, data?.recommendations.length, data?.prompts?.length])
+    conversationEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [events.length, data?.recommendations.length, data?.prompts?.length]);
 
   if (isLoading) {
     return (
       <div className={css.spinnerWrap}>
-        <CircularProgress sx={{ color: 'var(--lobby-accent)' }} />
+        <CircularProgress sx={{ color: "var(--lobby-accent)" }} />
       </div>
-    )
+    );
   }
   if (error || !data) {
-    return <div className={css.errorPanel}>Session not found.</div>
+    return <div className={css.errorPanel}>Session not found.</div>;
   }
 
   const handleFeedback = (rec: Recommendation, next: FeedbackStatus) => {
-    if (!id) return
-    feedback.mutate({ id: rec.id, feedback: next, sessionId: id })
-  }
+    if (!id) return;
+    feedback.mutate({ id: rec.id, feedback: next, sessionId: id });
+  };
 
   const handleContinue = async (text: string) => {
-    if (!id) return
-    setStreamDone(false)
-    const nextCycle = data.prompts?.length ?? 1
-    setActiveCycle(nextCycle)
-    await cont.mutateAsync({ sessionId: id, body: { prompt: text } })
-  }
+    if (!id) return;
+    setStreamDone(false);
+    const nextCycle = data.prompts?.length ?? 1;
+    setActiveCycle(nextCycle);
+    await cont.mutateAsync({ sessionId: id, body: { prompt: text } });
+  };
 
-  const status = data.status
+  const status = data.status;
   const inProgress =
-    !streamDone && (status === 'pending' || status === 'running')
+    !streamDone && (status === "pending" || status === "running");
 
-  const prompts = data.prompts ?? [data.user_prompt]
+  const prompts = data.prompts ?? [data.user_prompt];
   const cycles = Array.from(
     new Set([
       ...prompts.map((_, i) => i),
       ...data.recommendations.map((r) => r.cycle),
       ...data.tool_calls.map((tc) => tc.cycle),
     ]),
-  ).sort((a, b) => a - b)
+  ).sort((a, b) => a - b);
 
   // Latest follow-up suggestion drives the placeholder when continuing.
   const liveSuggestion = (() => {
     for (let i = events.length - 1; i >= 0; i--) {
-      const evt = events[i]
+      const evt = events[i];
       if (
-        evt.type === 'recommendations_ready' &&
-        typeof evt.data.follow_up_suggestion === 'string' &&
+        evt.type === "recommendations_ready" &&
+        typeof evt.data.follow_up_suggestion === "string" &&
         evt.data.follow_up_suggestion.trim()
       ) {
-        return evt.data.follow_up_suggestion as string
+        return evt.data.follow_up_suggestion as string;
       }
     }
-    return null
-  })()
+    return null;
+  })();
   const persistedSuggestion =
     [...(data.follow_up_suggestions ?? [])]
       .reverse()
-      .find((s): s is string => typeof s === 'string' && s.trim().length > 0) ?? null
+      .find((s): s is string => typeof s === "string" && s.trim().length > 0) ??
+    null;
   const placeholder =
-    liveSuggestion ?? persistedSuggestion ?? 'something a little weirder…'
+    liveSuggestion ?? persistedSuggestion ?? "something a little weirder…";
 
   return (
     <div className={css.root}>
@@ -133,8 +133,8 @@ export function SessionDetailPage() {
           eyebrowPulsing={inProgress}
           staticTagline="From the archive."
           rightLinks={[
-            { to: '/', label: 'Home' },
-            { to: '/history', label: 'History' },
+            { to: "/", label: "Home" },
+            { to: "/history", label: "History" },
           ]}
         />
 
@@ -160,15 +160,15 @@ export function SessionDetailPage() {
 
         <div className={css.cycles}>
           {cycles.map((cycle) => {
-            const prompt = prompts[cycle] ?? '(no prompt recorded)'
-            const isLatest = cycle === cycles[cycles.length - 1]
-            const isLive = isLatest && activeCycle === cycle && inProgress
+            const prompt = prompts[cycle] ?? "(no prompt recorded)";
+            const isLatest = cycle === cycles[cycles.length - 1];
+            const isLive = isLatest && activeCycle === cycle && inProgress;
             const persisted = toolCallsToEntries(
               data.tool_calls.filter((tc) => tc.cycle === cycle),
-            )
-            const live = isLive ? eventsToToolEntries(events, cycle) : []
-            const entries = mergeEntries(persisted, live)
-            const recs = data.recommendations.filter((r) => r.cycle === cycle)
+            );
+            const live = isLive ? eventsToToolEntries(events, cycle) : [];
+            const entries = mergeEntries(persisted, live);
+            const recs = data.recommendations.filter((r) => r.cycle === cycle);
             return (
               <CycleSection
                 key={cycle}
@@ -180,7 +180,7 @@ export function SessionDetailPage() {
                 onFeedback={handleFeedback}
                 feedbackPending={feedback.isPending}
               />
-            )
+            );
           })}
 
           {inProgress && (
@@ -188,8 +188,10 @@ export function SessionDetailPage() {
               <LinearProgress
                 aria-label="working"
                 sx={{
-                  bgcolor: 'var(--lobby-border)',
-                  '& .MuiLinearProgress-bar': { bgcolor: 'var(--lobby-accent)' },
+                  bgcolor: "var(--lobby-border)",
+                  "& .MuiLinearProgress-bar": {
+                    bgcolor: "var(--lobby-accent)",
+                  },
                 }}
               />
             </div>
@@ -210,17 +212,17 @@ export function SessionDetailPage() {
         placeholder={placeholder}
       />
     </div>
-  )
+  );
 }
 
 interface CycleProps {
-  cycle: number
-  prompt: string
-  entries: ToolLogEntry[]
-  recs: Recommendation[]
-  inProgress: boolean
-  onFeedback: (rec: Recommendation, next: FeedbackStatus) => void
-  feedbackPending: boolean
+  cycle: number;
+  prompt: string;
+  entries: ToolLogEntry[];
+  recs: Recommendation[];
+  inProgress: boolean;
+  onFeedback: (rec: Recommendation, next: FeedbackStatus) => void;
+  feedbackPending: boolean;
 }
 
 function CycleSection({
@@ -233,13 +235,15 @@ function CycleSection({
   feedbackPending,
 }: CycleProps) {
   // Default-collapsed reasoning, just like the live conversation view.
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false);
 
   return (
     <div className={css.cycleBlock}>
       <div className={css.queryRow}>
         <div className={css.queryLabel}>
-          {cycle === 0 ? 'REQUEST →' : `FOLLOW-UP ${String(cycle).padStart(2, '0')} →`}
+          {cycle === 0
+            ? "REQUEST →"
+            : `FOLLOW-UP ${String(cycle).padStart(2, "0")} →`}
         </div>
         <div className={css.queryText}>“{prompt}”</div>
       </div>
@@ -253,11 +257,14 @@ function CycleSection({
           >
             <span className={css.reasoningLabel}>REASONING</span>
             <span className={css.reasoningCount}>
-              {entries.length} tool call{entries.length === 1 ? '' : 's'}
-              {inProgress && ' · running'}
+              {entries.length} tool call{entries.length === 1 ? "" : "s"}
+              {inProgress && " · running"}
             </span>
             <span
-              className={clsx(css.reasoningChevron, open && css.reasoningChevronOpen)}
+              className={clsx(
+                css.reasoningChevron,
+                open && css.reasoningChevronOpen,
+              )}
             >
               ▾
             </span>
@@ -284,32 +291,36 @@ function CycleSection({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function mergeEntries(
   persisted: ToolLogEntry[],
   live: ToolLogEntry[],
 ): ToolLogEntry[] {
-  if (live.length === 0) return persisted
-  if (persisted.length === 0) return live
-  const seen = new Set<string>()
-  const out: ToolLogEntry[] = []
+  if (live.length === 0) return persisted;
+  if (persisted.length === 0) return live;
+  const seen = new Set<string>();
+  const out: ToolLogEntry[] = [];
   for (const e of persisted) {
-    const sig = `${e.cycle}:${e.turn}:${e.toolName}:${JSON.stringify(e.toolInput)}`
-    seen.add(sig)
-    out.push(e)
+    const sig = `${e.cycle}:${e.turn}:${e.toolName}:${JSON.stringify(e.toolInput)}`;
+    seen.add(sig);
+    out.push(e);
   }
   for (const e of live) {
-    const sig = `${e.cycle}:${e.turn}:${e.toolName}:${JSON.stringify(e.toolInput)}`
-    if (!seen.has(sig)) out.push(e)
+    const sig = `${e.cycle}:${e.turn}:${e.toolName}:${JSON.stringify(e.toolInput)}`;
+    if (!seen.has(sig)) out.push(e);
   }
-  return out
+  return out;
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso)
+  const d = new Date(iso);
   return d
-    .toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-    .toUpperCase()
+    .toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+    })
+    .toUpperCase();
 }

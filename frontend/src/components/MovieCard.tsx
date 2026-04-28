@@ -1,19 +1,19 @@
-import { Tooltip } from '@mui/material'
-import ThumbUpIcon from '@mui/icons-material/ThumbUp'
-import ThumbDownIcon from '@mui/icons-material/ThumbDown'
-import VisibilityIcon from '@mui/icons-material/Visibility'
-import CloseIcon from '@mui/icons-material/Close'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import { useState } from 'react'
-import clsx from 'clsx'
+import { Tooltip } from "@mui/material";
+import ThumbUpIcon from "@mui/icons-material/ThumbUp";
+import ThumbDownIcon from "@mui/icons-material/ThumbDown";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import CloseIcon from "@mui/icons-material/Close";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import { useState } from "react";
+import clsx from "clsx";
 
-import type { FeedbackStatus, Recommendation } from '@/types'
-import css from './MovieCard.module.less'
+import type { FeedbackStatus, Recommendation } from "@/types";
+import css from "./MovieCard.module.less";
 
 interface Props {
-  rec: Recommendation
-  onFeedback?: (next: FeedbackStatus) => void
-  feedbackPending?: boolean
+  rec: Recommendation;
+  onFeedback?: (next: FeedbackStatus) => void;
+  feedbackPending?: boolean;
 }
 
 /**
@@ -23,16 +23,18 @@ interface Props {
  * choosing between active/inactive class names.
  */
 export function MovieCard({ rec, onFeedback, feedbackPending }: Props) {
-  const [imageOk, setImageOk] = useState(true)
+  const [imageOk, setImageOk] = useState(true);
 
-  const idx = (rec.position ?? 1) - 1
-  const numberLabel = String(idx + 1).padStart(2, '0')
-  const director = rec.directors?.[0]
-  const castLine = (rec.cast ?? []).slice(0, 2).join(', ')
-  const runtime = rec.runtime_min ? `${rec.runtime_min} MIN` : null
-  const contentRating = rec.content_rating ?? null
+  const idx = (rec.position ?? 1) - 1;
+  const numberLabel = String(idx + 1).padStart(2, "0");
+  const director = rec.directors?.[0];
+  const castLine = (rec.cast ?? []).slice(0, 2).join(", ");
+  const runtime = rec.runtime_min ? `${rec.runtime_min} MIN` : null;
+  const contentRating = rec.content_rating ?? null;
   const matchPct =
-    typeof rec.audience_rating === 'number' ? Math.round(rec.audience_rating * 10) : null
+    typeof rec.audience_rating === "number"
+      ? Math.round(rec.audience_rating * 10)
+      : null;
 
   return (
     <article className={css.card}>
@@ -59,7 +61,7 @@ export function MovieCard({ rec, onFeedback, feedbackPending }: Props) {
           PICK {numberLabel}
           {director && (
             <>
-              {' · DIR. '}
+              {" · DIR. "}
               <span className={css.eyebrowDir}>{director.toUpperCase()}</span>
             </>
           )}
@@ -74,7 +76,7 @@ export function MovieCard({ rec, onFeedback, feedbackPending }: Props) {
           <div className={css.meta}>
             {[runtime, contentRating, castLine.toUpperCase()]
               .filter(Boolean)
-              .join(' · ')}
+              .join(" · ")}
           </div>
         )}
 
@@ -101,18 +103,20 @@ export function MovieCard({ rec, onFeedback, feedbackPending }: Props) {
             {onFeedback && (
               <>
                 <FeedbackPill
-                  active={rec.feedback === 'up'}
+                  active={rec.feedback === "up"}
                   label="Good pick"
                   icon={<ThumbUpIcon sx={{ fontSize: 14 }} />}
-                  onClick={() => onFeedback(rec.feedback === 'up' ? 'none' : 'up')}
+                  onClick={() =>
+                    onFeedback(rec.feedback === "up" ? "none" : "up")
+                  }
                   disabled={feedbackPending}
                 />
                 <FeedbackPill
-                  active={rec.feedback === 'watched'}
+                  active={rec.feedback === "watched"}
                   label="Watched"
                   icon={<VisibilityIcon sx={{ fontSize: 14 }} />}
                   onClick={() =>
-                    onFeedback(rec.feedback === 'watched' ? 'none' : 'watched')
+                    onFeedback(rec.feedback === "watched" ? "none" : "watched")
                   }
                   disabled={feedbackPending}
                 />
@@ -122,14 +126,16 @@ export function MovieCard({ rec, onFeedback, feedbackPending }: Props) {
                     <button
                       className={css.dismissBtn}
                       onClick={() =>
-                        onFeedback(rec.feedback === 'down' ? 'none' : 'down')
+                        onFeedback(rec.feedback === "down" ? "none" : "down")
                       }
                       disabled={feedbackPending}
                       aria-label="not for me"
-                      aria-pressed={rec.feedback === 'down'}
+                      aria-pressed={rec.feedback === "down"}
                     >
-                      {rec.feedback === 'down' ? (
-                        <ThumbDownIcon sx={{ fontSize: 16, color: 'var(--lobby-accent)' }} />
+                      {rec.feedback === "down" ? (
+                        <ThumbDownIcon
+                          sx={{ fontSize: 16, color: "var(--lobby-accent)" }}
+                        />
                       ) : (
                         <CloseIcon sx={{ fontSize: 16 }} />
                       )}
@@ -143,20 +149,20 @@ export function MovieCard({ rec, onFeedback, feedbackPending }: Props) {
 
         {(rec.genres ?? []).length > 0 && (
           <div className={css.footer}>
-            PLEX · {(rec.genres ?? []).slice(0, 3).join(' / ').toUpperCase()}
+            PLEX · {(rec.genres ?? []).slice(0, 3).join(" / ").toUpperCase()}
           </div>
         )}
       </div>
     </article>
-  )
+  );
 }
 
 interface PillProps {
-  active: boolean
-  label: string
-  icon: React.ReactNode
-  onClick: () => void
-  disabled?: boolean
+  active: boolean;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
 }
 
 function FeedbackPill({ active, label, icon, onClick, disabled }: PillProps) {
@@ -175,21 +181,27 @@ function FeedbackPill({ active, label, icon, onClick, disabled }: PillProps) {
         </button>
       </span>
     </Tooltip>
-  )
+  );
 }
 
-function PosterFallback({ title, year }: { title: string; year: number | null }) {
+function PosterFallback({
+  title,
+  year,
+}: {
+  title: string;
+  year: number | null;
+}) {
   const initials = title
     .split(/\s+/)
     .slice(0, 3)
-    .map((s) => s[0] || '')
-    .join('')
+    .map((s) => s[0] || "")
+    .join("")
     .toUpperCase()
-    .slice(0, 3)
+    .slice(0, 3);
   return (
     <div className={css.posterFallback}>
-      <div className={css.posterFallbackInitials}>{initials || '·'}</div>
+      <div className={css.posterFallbackInitials}>{initials || "·"}</div>
       {year && <div className={css.posterFallbackYear}>{year}</div>}
     </div>
-  )
+  );
 }
