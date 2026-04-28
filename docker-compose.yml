@@ -29,7 +29,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-mise}:${POSTGRES_PASSWORD:-mise}@postgres:5432/${POSTGRES_DB:-mise}
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
 
 volumes:
   pgdata:
