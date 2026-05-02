@@ -15,6 +15,13 @@
       "when": 1777750548795,
       "tag": "0001_familiar_tomas",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777752356750,
+      "tag": "0002_cheerful_proteus",
+      "breakpoints": true
     }
   ]
 }

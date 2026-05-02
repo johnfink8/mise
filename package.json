@@ -16,6 +16,7 @@
     "@mastra/core": "^0.10.0",
     "drizzle-orm": "^0.44.0",
     "next": "^16.2.4",
+    "node-cron": "^4.2.1",
     "pino": "^9.5.0",
     "postgres": "^3.4.5",
     "react": "^19.2.5",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "dotenv": "^17.4.2",

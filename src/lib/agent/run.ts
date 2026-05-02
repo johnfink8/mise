@@ -1,175 +1,183 @@
-import { getAgent, LOOP_LIMITS } from './index';
+import { getAgent } from './index';
+import { extractJsonObject } from './parse';
 import { RecommendationOutput, type RecommendationOutputT } from './output';
 import { validateRecommendations } from './validate';
+import { limits } from '@/lib/limits';
 
-export interface RunResult {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CoreMessage = { role: 'user' | 'assistant' | 'tool' | 'system'; content: any };
+
+export interface AgentRunEvents {
+  onText: (turn: number, text: string) => void;
+  onToolCall: (
+    turn: number,
+    toolName: string,
+    input: Record<string, unknown>,
+    output: unknown,
+    durationMs: number,
+  ) => void;
+}
+
+export interface AgentRunResult {
   output: RecommendationOutputT;
-  dropped: string[];
-  retries: number;
+  newMessages: CoreMessage[];
   inputTokens: number;
   outputTokens: number;
-  toolCalls: number;
-  rawText: string;
+  toolCallsCount: number;
+  stepTexts: { turn: number; text: string }[];
 }
 
-const MAX_VALIDATION_RETRIES = 2;
-
-function extractJsonObject(text: string): unknown {
-  const trimmed = text.trim();
-  // First try: whole text is JSON.
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    // continue
+export class CycleAbortError extends Error {
+  constructor(public reason: 'timeout' | 'cycle_token_budget') {
+    super(reason === 'timeout' ? 'cycle wallclock timeout' : 'cycle token budget exceeded');
   }
-  // Fallback: extract the first balanced { ... } block.
-  const start = trimmed.indexOf('{');
-  if (start < 0) throw new Error('no JSON object in agent response');
-  let depth = 0;
-  let inStr = false;
-  let escape = false;
-  for (let i = start; i < trimmed.length; i++) {
-    const ch = trimmed[i];
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (inStr) {
-      if (ch === '\\') escape = true;
-      else if (ch === '"') inStr = false;
-      continue;
-    }
-    if (ch === '"') inStr = true;
-    else if (ch === '{') depth++;
-    else if (ch === '}') {
-      depth--;
-      if (depth === 0) {
-        const slice = trimmed.slice(start, i + 1);
-        return JSON.parse(slice);
-      }
-    }
-  }
-  throw new Error('unbalanced JSON object in agent response');
 }
 
-type Msg = { role: 'user' | 'assistant'; content: string };
-
-export interface AttemptDiag {
-  finishReason: string | undefined;
-  toolCalls: number;
-  textLen: number;
-  textPreview: string;
-}
-
-export async function runAgentOnce(prompt: string): Promise<RunResult> {
+/**
+ * Drive the recommender agent for a single cycle (one user prompt).
+ *
+ * Owns: validation-retry loop, wallclock + token-budget abort, structured
+ * output extraction. Knows nothing about sessions, the DB, or the SSE bus —
+ * the caller wires those via the `emit` callbacks.
+ */
+export async function runAgentCycle(args: {
+  userPrompt: string;
+  priorMessages: CoreMessage[];
+  emit?: AgentRunEvents;
+}): Promise<AgentRunResult> {
+  const { userPrompt, priorMessages, emit } = args;
   const agent = await getAgent();
-  let dropped: string[] = [];
+
   let totalIn = 0;
   let totalOut = 0;
-  let totalToolCalls = 0;
-  const messages: Msg[] = [{ role: 'user', content: prompt }];
+  let toolCallsCount = 0;
   let lastText = '';
-  const diag: AttemptDiag[] = [];
+  let turn = 0;
 
-  for (let attempt = 0; attempt <= MAX_VALIDATION_RETRIES; attempt++) {
-    let stepIdx = 0;
-    console.log('[runAgent attempt %d] start, messages=%d', attempt, messages.length);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result: any = await agent.generate(messages as any, {
-      maxSteps: LOOP_LIMITS.maxSteps,
+  const messages: CoreMessage[] = [...priorMessages, { role: 'user', content: userPrompt }];
+  const stepTexts: { turn: number; text: string }[] = [];
+
+  const ac = new AbortController();
+  let abortReason: CycleAbortError['reason'] | null = null;
+  const timeoutHandle = setTimeout(() => {
+    if (!ac.signal.aborted) {
+      abortReason = 'timeout';
+      ac.abort();
+    }
+  }, limits.cycleTimeoutMs);
+
+  const providerOptions =
+    limits.thinkingBudgetTokens > 0
+      ? {
+          anthropic: {
+            thinking: {
+              type: 'enabled' as const,
+              budgetTokens: limits.thinkingBudgetTokens,
+            },
+          },
+        }
+      : undefined;
+
+  try {
+    for (let attempt = 0; attempt <= limits.validationRetries; attempt++) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      onStepFinish: (step: any) => {
-        stepIdx++;
-        const tcs = (step?.toolCalls ?? []) as Array<{
-          toolName?: string;
-          args?: unknown;
-        }>;
-        const textPreview = String(step?.text ?? '').slice(0, 200);
-        const finish = step?.finishReason;
-        if (tcs.length > 0) {
-          for (const tc of tcs) {
-            console.log(
-              '[runAgent step %d] tool=%s args=%s',
-              stepIdx,
-              tc.toolName,
-              JSON.stringify(tc.args ?? {}).slice(0, 200),
-            );
-          }
-        }
-        if (textPreview) {
-          console.log('[runAgent step %d] text=%j', stepIdx, textPreview);
-        }
-        console.log('[runAgent step %d] finish=%s', stepIdx, finish);
-      },
-    });
+      const result: any = await agent
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .generate(messages as any, {
+          maxSteps: limits.agentMaxSteps,
+          abortSignal: ac.signal,
+          providerOptions,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onStepFinish: (step: any) => {
+            turn += 1;
+            totalIn += Number(step?.usage?.promptTokens ?? step?.usage?.inputTokens ?? 0);
+            totalOut += Number(step?.usage?.completionTokens ?? step?.usage?.outputTokens ?? 0);
+            if (totalIn + totalOut > limits.cycleTokenBudget && !ac.signal.aborted) {
+              abortReason = 'cycle_token_budget';
+              ac.abort();
+            }
+            const text = String(step?.text ?? '').trim();
+            if (text) {
+              stepTexts.push({ turn, text });
+              emit?.onText(turn, text);
+            }
+            const tcs = (step?.toolCalls ?? []) as Array<{
+              toolName?: string;
+              toolCallId?: string;
+              args?: unknown;
+            }>;
+            const trs = (step?.toolResults ?? []) as Array<{
+              toolName?: string;
+              toolCallId?: string;
+              args?: unknown;
+              result?: unknown;
+            }>;
+            const resByCall = new Map(trs.map((r) => [r.toolCallId, r]));
+            for (const tc of tcs) {
+              const tr = resByCall.get(tc.toolCallId);
+              const toolName = tc.toolName ?? '?';
+              const input = (tc.args ?? {}) as Record<string, unknown>;
+              const output = (tr?.result ?? null) as unknown;
+              toolCallsCount += 1;
+              emit?.onToolCall(turn, toolName, input, output, 0);
+            }
+          },
+        })
+        .catch((err: unknown) => {
+          if (abortReason) throw new CycleAbortError(abortReason);
+          throw err;
+        });
 
-    totalIn += Number(result?.usage?.promptTokens ?? result?.usage?.inputTokens ?? 0);
-    totalOut += Number(result?.usage?.completionTokens ?? result?.usage?.outputTokens ?? 0);
-    totalToolCalls += Number(result?.toolCalls?.length ?? 0);
+      lastText = String(result?.text ?? '');
 
-    lastText = String(result?.text ?? '');
-    const finishReason = result?.finishReason as string | undefined;
-    diag.push({
-      finishReason,
-      toolCalls: Number(result?.toolCalls?.length ?? 0),
-      textLen: lastText.length,
-      textPreview: lastText.slice(0, 300),
-    });
-    console.log('[runAgent attempt %d] %j', attempt, diag[diag.length - 1]);
+      const fail = (nudge: string) => {
+        messages.push({ role: 'assistant', content: lastText || '(no text emitted)' });
+        messages.push({ role: 'user', content: nudge });
+      };
 
-    const fail = (nudge: string) => {
-      messages.push({ role: 'assistant', content: lastText || '(no text emitted)' });
-      messages.push({ role: 'user', content: nudge });
-    };
+      if (!lastText.trim()) {
+        fail(
+          'You stopped without producing a final response. Do NOT call any more tools. Reply RIGHT NOW with the JSON object specified in the system prompt — recommendations + follow_up_suggestion — using rating_keys you already have from prior tool results. No preamble, no markdown fences, just the JSON.',
+        );
+        continue;
+      }
 
-    if (!lastText.trim()) {
-      fail(
-        'You stopped without producing a final response. Do NOT call any more tools. Reply RIGHT NOW with the JSON object specified in the system prompt — recommendations + follow_up_suggestion — using rating_keys you already have from prior tool results. No preamble, no markdown fences, just the JSON.',
-      );
-      continue;
-    }
+      let parsed: unknown;
+      try {
+        parsed = extractJsonObject(lastText);
+      } catch (err) {
+        fail(
+          `Your previous response did not contain a valid JSON object (${err instanceof Error ? err.message : String(err)}). Reply with the JSON object exactly as specified in the system prompt — no preamble, no markdown fences.`,
+        );
+        continue;
+      }
+      const validated = RecommendationOutput.safeParse(parsed);
+      if (!validated.success) {
+        fail(
+          `Your previous JSON did not match the required schema. Issues: ${validated.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}. Reply with the corrected JSON object only.`,
+        );
+        continue;
+      }
+      const v = await validateRecommendations(validated.data);
+      if (!v.ok || !v.cleaned) {
+        fail(v.retryMessage ?? 'Please retry with valid rating_keys from tool results.');
+        continue;
+      }
 
-    let parsed: unknown;
-    try {
-      parsed = extractJsonObject(lastText);
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      fail(
-        `Your previous response did not contain a valid JSON object (${reason}). Reply with the JSON object exactly as specified in the system prompt — no preamble, no markdown fences.`,
-      );
-      continue;
-    }
-
-    const validated = RecommendationOutput.safeParse(parsed);
-    if (!validated.success) {
-      fail(
-        `Your previous JSON did not match the required schema. Issues: ${validated.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}. Reply with the corrected JSON object only.`,
-      );
-      continue;
-    }
-
-    const v = await validateRecommendations(validated.data);
-    dropped = [...dropped, ...v.dropped];
-
-    if (v.ok && v.cleaned) {
+      messages.push({ role: 'assistant', content: lastText });
+      const newMessages = messages.slice(priorMessages.length);
       return {
         output: v.cleaned,
-        dropped,
-        retries: attempt,
+        newMessages,
         inputTokens: totalIn,
         outputTokens: totalOut,
-        toolCalls: totalToolCalls,
-        rawText: lastText,
+        toolCallsCount,
+        stepTexts,
       };
     }
 
-    fail(v.retryMessage ?? 'Please retry with valid rating_keys from tool results.');
+    throw new Error(`agent failed after ${limits.validationRetries + 1} attempt(s)`);
+  } finally {
+    clearTimeout(timeoutHandle);
   }
-
-  const err = new Error(
-    `agent failed validation after ${MAX_VALIDATION_RETRIES + 1} attempts. Diagnostics: ${JSON.stringify(diag)}`,
-  );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (err as any).diag = diag;
-  throw err;
 }

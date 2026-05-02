@@ -316,14 +316,20 @@ export async function search(filters: SearchFilters): Promise<SearchResult> {
   if (filters.query) {
     rankedBy = 'query_similarity';
     const qvec = vectorLiteral(await embed(filters.query));
-    const result = await db
-      .select(getTableColumns(movie))
-      .from(movie)
-      .innerJoin(movieEmbedding, eq(movieEmbedding.ratingKey, movie.ratingKey))
-      .where(where)
-      .orderBy(sql`${movieEmbedding.embedding} <=> ${qvec}::vector`)
-      .limit(limit);
-    rows = result;
+    // pgvector HNSW + WHERE clause needs iterative_scan, otherwise the index
+    // returns the top ef_search (~40) candidates and THEN applies the filter,
+    // which can give us far fewer than `limit` results. SET LOCAL scopes it
+    // to this transaction.
+    rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL hnsw.iterative_scan = strict_order`);
+      return tx
+        .select(getTableColumns(movie))
+        .from(movie)
+        .innerJoin(movieEmbedding, eq(movieEmbedding.ratingKey, movie.ratingKey))
+        .where(where)
+        .orderBy(sql`${movieEmbedding.embedding} <=> ${qvec}::vector`)
+        .limit(limit);
+    });
   } else {
     const sort = filters.sort ?? 'popularity';
     const order =
@@ -357,17 +363,20 @@ export async function similarTo(ratingKey: string, k = 10) {
   const seed = alias(movieEmbedding, 'seed');
   const peer = alias(movieEmbedding, 'peer');
   const distance = sql<number>`(${peer.embedding} <=> ${seed.embedding})::float`;
-  return db
-    .select({
-      ...getTableColumns(movie),
-      distance: distance.as('distance'),
-    })
-    .from(seed)
-    .innerJoin(peer, ne(peer.ratingKey, seed.ratingKey))
-    .innerJoin(movie, eq(movie.ratingKey, peer.ratingKey))
-    .where(eq(seed.ratingKey, ratingKey))
-    .orderBy(distance)
-    .limit(k);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL hnsw.iterative_scan = strict_order`);
+    return tx
+      .select({
+        ...getTableColumns(movie),
+        distance: distance.as('distance'),
+      })
+      .from(seed)
+      .innerJoin(peer, ne(peer.ratingKey, seed.ratingKey))
+      .innerJoin(movie, eq(movie.ratingKey, peer.ratingKey))
+      .where(eq(seed.ratingKey, ratingKey))
+      .orderBy(distance)
+      .limit(k);
+  });
 }
 
 export async function rankByQuery(
@@ -377,11 +386,14 @@ export async function rankByQuery(
 ) {
   if (candidateKeys.length === 0) return [];
   const qvec = vectorLiteral(await embed(query));
-  return db
-    .select(getTableColumns(movie))
-    .from(movie)
-    .innerJoin(movieEmbedding, eq(movieEmbedding.ratingKey, movie.ratingKey))
-    .where(inArray(movie.ratingKey, candidateKeys))
-    .orderBy(sql`${movieEmbedding.embedding} <=> ${qvec}::vector`)
-    .limit(limit);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL hnsw.iterative_scan = strict_order`);
+    return tx
+      .select(getTableColumns(movie))
+      .from(movie)
+      .innerJoin(movieEmbedding, eq(movieEmbedding.ratingKey, movie.ratingKey))
+      .where(inArray(movie.ratingKey, candidateKeys))
+      .orderBy(sql`${movieEmbedding.embedding} <=> ${qvec}::vector`)
+      .limit(limit);
+  });
 }

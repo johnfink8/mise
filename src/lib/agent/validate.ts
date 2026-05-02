@@ -1,16 +1,15 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { getMoviesByKeys } from '@/lib/catalog';
 import type { RecommendationOutputT } from './output';
 
-let cachedNudge: string | null = null;
-export async function loadNudge(): Promise<string> {
-  if (cachedNudge !== null) return cachedNudge;
-  cachedNudge = (
-    await readFile(path.join(process.cwd(), 'prompts', 'nudge.md'), 'utf8')
-  ).trim();
-  return cachedNudge;
-}
+const EMPTY_PICKS_NUDGE =
+  'You submitted zero recommendations. Use the catalog tools to find candidates ' +
+  'and reply with the JSON object specified in the system prompt — at least one ' +
+  'recommendation, with rating_keys taken directly from prior tool results.';
+
+const HALLUCINATED_KEYS_NUDGE =
+  'None of the rating_keys you submitted exist in the catalog. ' +
+  'Run search_movies (or the other lookup tools) and pick rating_keys directly ' +
+  'from those tool results, then submit recommendations again.';
 
 export interface ValidationResult {
   ok: boolean;
@@ -27,7 +26,7 @@ export async function validateRecommendations(
     .filter(Boolean);
 
   if (candidateKeys.length === 0) {
-    return { ok: false, retryMessage: await loadNudge(), dropped: [] };
+    return { ok: false, retryMessage: EMPTY_PICKS_NUDGE, dropped: [] };
   }
 
   const known = await getMoviesByKeys(candidateKeys);
@@ -48,13 +47,7 @@ export async function validateRecommendations(
   }
 
   if (cleaned.length === 0) {
-    return {
-      ok: false,
-      retryMessage:
-        'None of the rating_keys you submitted exist in the catalog. ' +
-        'Run search_movies (or the other lookup tools) and pick rating_keys directly from those tool results, then submit recommendations again.',
-      dropped,
-    };
+    return { ok: false, retryMessage: HALLUCINATED_KEYS_NUDGE, dropped };
   }
 
   const followUp = output.follow_up_suggestion?.trim().slice(0, 120) || null;

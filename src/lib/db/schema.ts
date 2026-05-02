@@ -86,6 +86,10 @@ export const session = pgTable('session', {
     .$type<Array<{ role: string; content: any }>>()
     .notNull()
     .default(sql`'[]'::jsonb`),
+  stepTexts: jsonb('step_texts')
+    .$type<Array<{ cycle: number; turn: number; text: string }>>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
 });
 
 export const recommendation = pgTable(

@@ -113,6 +113,29 @@ export async function listCollections(): Promise<PlexCollection[]> {
   return collections;
 }
 
+let cachedMachineId: string | null = null;
+
+export async function getMachineIdentifier(): Promise<string | null> {
+  if (cachedMachineId) return cachedMachineId;
+  try {
+    const data = await plexGet<{ MediaContainer: { machineIdentifier?: string } }>(
+      '/identity',
+    );
+    const id = data.MediaContainer.machineIdentifier;
+    if (id) cachedMachineId = id;
+    return cachedMachineId;
+  } catch {
+    return null;
+  }
+}
+
+export function buildPlayUrl(machineId: string, ratingKey: string): string {
+  return (
+    `https://app.plex.tv/desktop/#!/server/${machineId}` +
+    `/details?key=%2Flibrary%2Fmetadata%2F${ratingKey}`
+  );
+}
+
 export async function listMovieSections(): Promise<PlexSection[]> {
   const data = await plexGet<{ MediaContainer: { Directory?: PlexSection[] } }>('/library/sections');
   return (data.MediaContainer.Directory ?? []).filter((d) => d.type === 'movie');

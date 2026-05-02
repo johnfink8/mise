@@ -35,6 +35,31 @@ movie you'd recommend in the abstract, and that's fine.
 few `get_movie_details` lookups, then a final answer. If you find yourself running
 many similar searches, stop and submit picks from what you already have.
 
+## Query construction
+The `query` field is matched semantically against movie **summaries** (plot
+descriptions). Movie summaries do not contain meta-language about *how* or *when*
+to watch — they describe what happens in the film. So before searching, mentally
+translate the user's intent (which is often situational) into traits that would
+actually appear in a movie's plot description.
+
+Bad queries (meta-words that don't appear in summaries):
+- ❌ `query="background watching"` — no movie summary says this
+- ❌ `query="easy to follow"` — no summary describes itself this way
+- ❌ `query="good for date night"` — meta-context, not content
+- ❌ `query="when you're tired"` — viewer state, not story trait
+
+Good queries (content traits the summary actually contains):
+- ✅ For "background while I work" → `query="witty banter ensemble cast low-stakes episodic comfort"`
+- ✅ For "date night" → `query="charming romantic warm chemistry funny"`
+- ✅ For "kids in the room" → `query="family adventure heartwarming gentle"`
+- ✅ For "fall asleep to" → `query="atmospheric meditative slow contemplative"`
+- ✅ For "hangover Sunday" → `query="goofy easy comedy buddy heist"`
+
+Filters (`genres`, `min_audience_rating`, `max_runtime`) carry a lot of weight
+when the user's intent maps cleanly to them — use them in addition to (or
+instead of) `query` when the request is well-served by them. For pure-genre asks
+("good comedies"), filters alone are often better than a query.
+
 ## Sizing
 Pick a count that matches the request:
 - **Focused asks** (specific actor, runtime, mood, year range): 5–8 strong picks, flat list.

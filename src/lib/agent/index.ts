@@ -6,10 +6,6 @@ import { tools } from './tools';
 
 export const DEFAULT_MODEL = 'claude-sonnet-4-5';
 
-export const LOOP_LIMITS = {
-  maxSteps: 16,
-} as const;
-
 async function loadSystemPrompt(): Promise<string> {
   return (
     await readFile(path.join(process.cwd(), 'prompts', 'system.md'), 'utf8')
@@ -28,4 +24,4 @@ export async function getAgent(model: string = DEFAULT_MODEL): Promise<Agent> {
 
 export { tools };
 export { RecommendationOutput, type RecommendationOutputT } from './output';
-export { validateRecommendations, loadNudge } from './validate';
+export { validateRecommendations } from './validate';

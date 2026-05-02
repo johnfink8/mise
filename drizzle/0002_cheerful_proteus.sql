@@ -1,0 +1,1 @@
+ALTER TABLE "session" ADD COLUMN "step_texts" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { session } from '@/lib/db/schema';
-import { continueSession } from '@/lib/recommender';
+import { continueSession } from '@/lib/sessions/run';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { listSessions, startSession } from '@/lib/recommender';
+import { listSessions } from '@/lib/sessions/queries';
+import { startSession } from '@/lib/sessions/run';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
