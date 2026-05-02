@@ -26,11 +26,14 @@
   --color-mise-down-soft: rgba(224, 138, 133, 0.18);
   --color-mise-watched: #88a9d8;
 
-  /* Override Tailwind's default font stacks with ours. */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Instrument Serif', 'Times New Roman', serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
-  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  /* Override Tailwind's default font stacks with ours. The `--mise-font-*`
+     variables are set on <html> by next/font (see layout.tsx); they resolve
+     to the self-hosted fonts shipped from /static, with system fallbacks
+     covering the few ms before the font binary parses. */
+  --font-sans: var(--mise-font-inter), system-ui, -apple-system, sans-serif;
+  --font-serif: var(--mise-font-instrument-serif), 'Times New Roman', serif;
+  --font-mono: var(--mise-font-jetbrains-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-display: var(--mise-font-space-grotesk), system-ui, sans-serif;
 
   /* Custom letter-spacing rungs used across mono labels. */
   --tracking-eyebrow: 0.22em;
