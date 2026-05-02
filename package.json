@@ -1,0 +1,34 @@
+{
+  "name": "mise-ts",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:up": "docker compose up -d postgres",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --experimental-strip-types --no-warnings scripts/migrate.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.2.10",
+    "@huggingface/transformers": "^3.7.0",
+    "@mastra/core": "^0.10.0",
+    "drizzle-orm": "^0.44.0",
+    "next": "^16.2.4",
+    "pino": "^9.5.0",
+    "postgres": "^3.4.5",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

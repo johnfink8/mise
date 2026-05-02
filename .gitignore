@@ -1,0 +1,12 @@
+.env
+.env.local
+node_modules/
+.next/
+out/
+dist/
+*.log
+.DS_Store
+.cache/
+.drizzle/
+next-env.d.ts
+docs/plans
