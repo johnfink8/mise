@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CycleBlock } from './CycleBlock';
-import { FollowUpForm } from './FollowUpForm';
-import { buildLiveSteps, buildSteps, mergeSteps } from './steps';
+import { useRouter } from 'next/navigation';
+import { LobbyInput } from './LobbyInput';
+import { LobbyTopBar } from './LobbyTopBar';
+import { LobbyTurn } from './LobbyTurn';
+import { ThinkingBlock } from './ThinkingBlock';
 import { useSessionStream } from './useSessionStream';
 import type {
   Feedback,
@@ -15,8 +17,7 @@ import type {
 } from './types';
 
 export default function SessionView({ initial }: { initial: SessionViewData }) {
-  // Stream-only state. The `initial` prop is the authoritative source; these
-  // hold things the server hasn't told us about yet.
+  const router = useRouter();
   const [streamRecs, setStreamRecs] = useState<RecOut[]>([]);
   const [liveCalls, setLiveCalls] = useState<LiveToolCall[]>([]);
   const [liveText, setLiveText] = useState<StepText[]>([]);
@@ -24,8 +25,8 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
   const [streamDone, setStreamDone] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [feedbackOverrides, setFeedbackOverrides] = useState<Record<string, Feedback>>({});
+  const [followUpBusy, setFollowUpBusy] = useState(false);
 
-  // Derived state — recomputed from initial + stream additions.
   const status: SessionStatus = streamError
     ? 'error'
     : streamDone
@@ -57,8 +58,6 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
     sessionId: initial.id,
     enabled: isLive,
     onOpen: () => {
-      // Reset terminal flags from any previous cycle so we can flip back to
-      // running cleanly on a follow-up.
       setStreamDone(false);
       setStreamError(null);
     },
@@ -85,8 +84,7 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
     onDone: () => setStreamDone(true),
   });
 
-  // Cycles include initial, persisted, and live data so a fresh in-flight
-  // cycle (no persisted rows yet) still renders.
+  // Cycles include initial, persisted, and live so a fresh in-flight cycle still renders.
   const cycles = useMemo(() => {
     const set = new Set<number>([
       ...recommendations.map((r) => r.cycle),
@@ -108,52 +106,83 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
     });
   };
 
+  const onFollowUp = async (text: string) => {
+    setFollowUpBusy(true);
+    try {
+      const res = await fetch(`/api/sessions/${initial.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text }),
+      });
+      if (!res.ok) throw new Error(`failed (${res.status})`);
+      router.refresh();
+    } finally {
+      setFollowUpBusy(false);
+    }
+  };
+
+  const liveCycle = isLive ? Math.max(...cycles) : null;
+  const totalRecCount = recommendations.length;
+
+  // PICK numbering offset per cycle — picks number consecutively across cycles.
+  const startIdxByCycle = new Map<number, number>();
+  let running = 0;
+  for (const c of cycles) {
+    startIdxByCycle.set(c, running);
+    running += recommendations.filter((r) => r.cycle === c).length;
+  }
+
   return (
-    <main>
-      <h2 style={{ marginTop: 0, fontSize: 20, fontWeight: 500 }}>{initial.userPrompt}</h2>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24 }}>
-        <span className={`pill ${status}`}>{status}</span>
-        {isLive && (
-          <span className="faint" style={{ fontSize: 12 }}>
-            agent is working…
-          </span>
+    <div className="flex min-h-screen flex-col">
+      <LobbyTopBar status={status} resultCount={totalRecCount} showNew />
+
+      <div className="mx-auto w-full max-w-[980px] flex-1 px-5 pb-7 sm:px-7">
+        {(streamError ?? initial.errorMessage) && (
+          <div className="my-4 rounded-sm border border-mise-down bg-mise-down/10 px-4 py-3 text-sm text-mise-down">
+            {streamError ?? initial.errorMessage}
+          </div>
         )}
+
+        {cycles.map((c) => {
+          const isThisLive = c === liveCycle;
+          const cyclePrompt = c === 0 ? initial.userPrompt : initial.prompts[c] ?? initial.userPrompt;
+          const cycleRecs = recommendations.filter((r) => r.cycle === c);
+          const cycleToolCalls = initial.toolCalls.filter((t) => t.cycle === c);
+          const cycleStepTexts = initial.stepTexts.filter((t) => t.cycle === c);
+
+          if (isThisLive && cycleRecs.length === 0) {
+            // Live thinking state — no recs yet for this cycle.
+            return (
+              <ThinkingBlock
+                key={c}
+                userRequest={cyclePrompt}
+                stepTexts={liveText.filter((t) => t.cycle === c)}
+                liveCalls={liveCalls.filter((t) => t.cycle === c)}
+                persistedCalls={cycleToolCalls}
+              />
+            );
+          }
+
+          return (
+            <LobbyTurn
+              key={c}
+              request={cyclePrompt}
+              recs={cycleRecs}
+              toolCalls={cycleToolCalls}
+              stepTexts={cycleStepTexts}
+              startIdx={startIdxByCycle.get(c) ?? 0}
+              onFeedback={onFeedback}
+            />
+          );
+        })}
       </div>
 
-      {(streamError ?? initial.errorMessage) && (
-        <div className="banner warn" style={{ marginBottom: 16 }}>
-          {streamError ?? initial.errorMessage}
-        </div>
-      )}
-
-      {cycles.map((c) => {
-        const persistedSteps = buildSteps(
-          initial.stepTexts.filter((t) => t.cycle === c),
-          initial.toolCalls.filter((t) => t.cycle === c),
-        );
-        const liveSteps = buildLiveSteps(
-          liveText.filter((t) => t.cycle === c),
-          liveCalls.filter((t) => t.cycle === c),
-        );
-        const steps = mergeSteps(persistedSteps, liveSteps);
-        return (
-          <CycleBlock
-            key={c}
-            cycle={c}
-            prompt={c === 0 ? initial.userPrompt : initial.prompts[c]}
-            steps={steps}
-            recs={recommendations.filter((r) => r.cycle === c)}
-            onFeedback={onFeedback}
-          />
-        );
-      })}
-
-      {status === 'complete' && (
-        <FollowUpForm
-          sessionId={initial.id}
-          placeholder={followUpSuggestions[followUpSuggestions.length - 1] ?? undefined}
-        />
-      )}
-    </main>
+      <LobbyInput
+        variant="follow-up"
+        placeholder={followUpSuggestions[followUpSuggestions.length - 1] ?? undefined}
+        disabled={isLive || followUpBusy}
+        onSubmit={onFollowUp}
+      />
+    </div>
   );
 }

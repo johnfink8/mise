@@ -10,6 +10,45 @@ services:
       - "5433:5432"
     volumes:
       - mise_ts_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mise"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    container_name: mise-ts-migrate
+    environment:
+      DATABASE_URL: postgres://mise:mise@postgres:5432/mise
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    container_name: mise-ts-app
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://mise:mise@postgres:5432/mise
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist the Hugging Face model cache so we don't redownload bge-small-en-v1.5
+      # on every container restart.
+      - mise_ts_hfcache:/app/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   mise_ts_pgdata:
+  mise_ts_hfcache:

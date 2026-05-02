@@ -1,7 +1,7 @@
 export default function Loading() {
   return (
-    <main>
-      <p className="faint">loading…</p>
+    <main className="mx-auto w-full max-w-[980px] px-7 py-10">
+      <p className="text-mise-fg-faint">loading…</p>
     </main>
   );
 }

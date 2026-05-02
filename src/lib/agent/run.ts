@@ -1,11 +1,40 @@
+import type { CoreMessage } from '@mastra/core';
 import { getAgent } from './index';
 import { extractJsonObject } from './parse';
 import { RecommendationOutput, type RecommendationOutputT } from './output';
 import { validateRecommendations } from './validate';
 import { limits } from '@/lib/limits';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CoreMessage = { role: 'user' | 'assistant' | 'tool' | 'system'; content: any };
+export type { CoreMessage };
+
+interface MastraUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+interface MastraToolCall {
+  toolName?: string;
+  toolCallId?: string;
+  args?: unknown;
+}
+
+interface MastraToolResult {
+  toolCallId?: string;
+  result?: unknown;
+}
+
+/**
+ * Subset of Mastra's onStepFinish callback argument that we actually read.
+ * Mastra's full type is wider; this narrows to the fields we use.
+ */
+interface MastraStepInfo {
+  text?: string;
+  usage?: MastraUsage;
+  toolCalls?: MastraToolCall[];
+  toolResults?: MastraToolResult[];
+}
 
 export interface AgentRunEvents {
   onText: (turn: number, text: string) => void;
@@ -80,55 +109,45 @@ export async function runAgentCycle(args: {
 
   try {
     for (let attempt = 0; attempt <= limits.validationRetries; attempt++) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result: any = await agent
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .generate(messages as any, {
+      const onStepFinish = (step: MastraStepInfo) => {
+        turn += 1;
+        totalIn += Number(step.usage?.promptTokens ?? step.usage?.inputTokens ?? 0);
+        totalOut += Number(step.usage?.completionTokens ?? step.usage?.outputTokens ?? 0);
+        if (totalIn + totalOut > limits.cycleTokenBudget && !ac.signal.aborted) {
+          abortReason = 'cycle_token_budget';
+          ac.abort();
+        }
+        const text = String(step.text ?? '').trim();
+        if (text) {
+          stepTexts.push({ turn, text });
+          emit?.onText(turn, text);
+        }
+        const tcs = step.toolCalls ?? [];
+        const trs = step.toolResults ?? [];
+        const resByCall = new Map(trs.map((r) => [r.toolCallId, r]));
+        for (const tc of tcs) {
+          const tr = resByCall.get(tc.toolCallId);
+          const toolName = tc.toolName ?? '?';
+          const input = (tc.args ?? {}) as Record<string, unknown>;
+          const output = tr?.result ?? null;
+          toolCallsCount += 1;
+          emit?.onToolCall(turn, toolName, input, output, 0);
+        }
+      };
+
+      const result = await agent
+        .generate(messages, {
           maxSteps: limits.agentMaxSteps,
           abortSignal: ac.signal,
           providerOptions,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onStepFinish: (step: any) => {
-            turn += 1;
-            totalIn += Number(step?.usage?.promptTokens ?? step?.usage?.inputTokens ?? 0);
-            totalOut += Number(step?.usage?.completionTokens ?? step?.usage?.outputTokens ?? 0);
-            if (totalIn + totalOut > limits.cycleTokenBudget && !ac.signal.aborted) {
-              abortReason = 'cycle_token_budget';
-              ac.abort();
-            }
-            const text = String(step?.text ?? '').trim();
-            if (text) {
-              stepTexts.push({ turn, text });
-              emit?.onText(turn, text);
-            }
-            const tcs = (step?.toolCalls ?? []) as Array<{
-              toolName?: string;
-              toolCallId?: string;
-              args?: unknown;
-            }>;
-            const trs = (step?.toolResults ?? []) as Array<{
-              toolName?: string;
-              toolCallId?: string;
-              args?: unknown;
-              result?: unknown;
-            }>;
-            const resByCall = new Map(trs.map((r) => [r.toolCallId, r]));
-            for (const tc of tcs) {
-              const tr = resByCall.get(tc.toolCallId);
-              const toolName = tc.toolName ?? '?';
-              const input = (tc.args ?? {}) as Record<string, unknown>;
-              const output = (tr?.result ?? null) as unknown;
-              toolCallsCount += 1;
-              emit?.onToolCall(turn, toolName, input, output, 0);
-            }
-          },
+          onStepFinish,
         })
         .catch((err: unknown) => {
           if (abortReason) throw new CycleAbortError(abortReason);
           throw err;
         });
 
-      lastText = String(result?.text ?? '');
+      lastText = String(result.text ?? '');
 
       const fail = (nudge: string) => {
         messages.push({ role: 'assistant', content: lastText || '(no text emitted)' });

@@ -2,21 +2,31 @@ import { pipeline } from '@huggingface/transformers';
 
 const MODEL_ID = 'Xenova/bge-small-en-v1.5';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let extractor: Promise<any> | null = null;
+// Narrow type for the bits of `feature-extraction` we actually use.
+// `@huggingface/transformers`' own typings are pathologically deep and trigger
+// "Expression produces a union type that is too complex to represent" (TS2590).
+type FeatureExtractor = (
+  text: string,
+  options: { pooling: 'mean' | 'cls' | 'none'; normalize: boolean },
+) => Promise<{ data: Float32Array }>;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getExtractor(): Promise<any> {
-  if (!extractor) {
-    extractor = pipeline('feature-extraction', MODEL_ID);
-  }
-  return extractor;
+let extractor: Promise<FeatureExtractor> | null = null;
+
+function getExtractor(): Promise<FeatureExtractor> {
+  if (extractor) return extractor;
+  // @ts-expect-error — '@huggingface/transformers' overloads `pipeline()`
+  // exhaustively per task; the inferred return for 'feature-extraction' is
+  // too deep to represent (TS2590). The runtime-correct return matches
+  // FeatureExtractor.
+  const ext: Promise<FeatureExtractor> = pipeline('feature-extraction', MODEL_ID);
+  extractor = ext;
+  return ext;
 }
 
 export async function embed(text: string): Promise<number[]> {
   const ext = await getExtractor();
   const out = await ext(text, { pooling: 'mean', normalize: true });
-  return Array.from(out.data as Float32Array);
+  return Array.from(out.data);
 }
 
 export async function embedMany(texts: string[]): Promise<number[][]> {

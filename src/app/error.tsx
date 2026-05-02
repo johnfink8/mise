@@ -8,17 +8,18 @@ export default function GlobalError({
   reset: () => void;
 }) {
   return (
-    <main>
-      <div className="banner warn">
+    <main className="mx-auto w-full max-w-[980px] px-7 py-10">
+      <div className="rounded-sm border border-mise-down bg-mise-down/10 px-4 py-3 text-mise-down">
         <strong>Something went wrong.</strong>
-        <p style={{ margin: '8px 0 0', fontSize: 13 }}>{error.message}</p>
+        <p className="mt-2 mb-0 text-[13px]">{error.message}</p>
         {error.digest && (
-          <p className="faint" style={{ margin: '4px 0 0', fontSize: 11 }}>
-            digest: {error.digest}
-          </p>
+          <p className="mt-1 mb-0 text-[11px] text-mise-fg-faint">digest: {error.digest}</p>
         )}
       </div>
-      <button onClick={reset} style={{ marginTop: 16 }}>
+      <button
+        onClick={reset}
+        className="mt-4 cursor-pointer rounded-sm border border-mise-border bg-transparent px-3 py-1.5 text-mise-fg hover:border-mise-accent"
+      >
         try again
       </button>
     </main>

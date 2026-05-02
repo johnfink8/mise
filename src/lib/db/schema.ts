@@ -82,8 +82,7 @@ export const session = pgTable('session', {
     .notNull()
     .default(sql`'[]'::jsonb`),
   messages: jsonb('messages')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .$type<Array<{ role: string; content: any }>>()
+    .$type<Array<{ role: string; content: unknown }>>()
     .notNull()
     .default(sql`'[]'::jsonb`),
   stepTexts: jsonb('step_texts')

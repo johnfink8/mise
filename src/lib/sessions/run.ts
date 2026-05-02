@@ -124,7 +124,7 @@ async function runCycle(args: CycleArgs): Promise<void> {
                 turn,
                 toolName,
                 toolInput: input,
-                toolOutput: output as unknown as Record<string, unknown> | null,
+                toolOutput: output,
                 durationMs,
               })
               .catch(() => undefined);
