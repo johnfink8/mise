@@ -1,0 +1,1 @@
+ALTER TABLE "session" DROP COLUMN "plex_playlist_rating_key";

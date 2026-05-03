@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Icon } from '@/components/Icon';
-import { Typewriter } from './Typewriter';
+import { StreamingText } from './StreamingText';
 import type { LiveToolCall, StepText, ToolCallOut } from './types';
 
 /**
@@ -47,10 +47,10 @@ export function ThinkingBlock({
         <div className="flex flex-1 flex-col gap-2">
           {current ? (
             <div
-              key={`cur-${current.turn}`}
+              key={`turn-${current.turn}`}
               className="font-serif text-[20px] italic leading-[1.45] text-mise-fg"
             >
-              <Typewriter text={current.text} />
+              <StreamingText text={current.text} />
               <span className="caret" />
             </div>
           ) : (

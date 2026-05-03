@@ -9,18 +9,18 @@
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
+  const { logger } = await import('./lib/logger');
+  const log = logger.child({ component: 'cron' });
+
   const { catalogCron } = await import('./lib/limits');
   if (catalogCron === 'off') {
-    console.log('[cron] catalog refresh disabled (MISE_CATALOG_CRON=off)');
+    log.info('catalog refresh disabled (MISE_CATALOG_CRON=off)');
     return;
   }
 
   const { schedule, validate } = await import('node-cron');
   if (!validate(catalogCron)) {
-    console.warn(
-      `[cron] invalid MISE_CATALOG_CRON expression %j — scheduled refresh disabled`,
-      catalogCron,
-    );
+    log.warn({ expression: catalogCron }, 'invalid MISE_CATALOG_CRON; scheduled refresh disabled');
     return;
   }
 
@@ -30,18 +30,14 @@ export async function register(): Promise<void> {
     const t0 = Date.now();
     try {
       const result = await refreshFromPlex({ force: false });
-      console.log(
-        '[cron] catalog refresh tick: count=%d elapsed=%dms',
-        result.count,
-        Date.now() - t0,
-      );
+      log.info({ count: result.count, elapsedMs: Date.now() - t0 }, 'catalog refresh tick');
     } catch (err) {
-      console.warn(
-        '[cron] catalog refresh failed: %s',
-        err instanceof Error ? err.message : String(err),
+      log.warn(
+        { err, elapsedMs: Date.now() - t0 },
+        'catalog refresh failed',
       );
     }
   });
 
-  console.log('[cron] catalog refresh scheduled: %s', catalogCron);
+  log.info({ schedule: catalogCron }, 'catalog refresh scheduled');
 }

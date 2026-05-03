@@ -23,7 +23,15 @@ import {
   movieEmbedding,
 } from './db/schema';
 import { buildEmbeddingText, embed, embedMany, vectorLiteral } from './embeddings';
-import { listCollections, listMovies, type PlexMovie } from './plex';
+import { logger } from './logger';
+import {
+  enrichWithFullMetadata,
+  listCollections,
+  listMovies,
+  type PlexMovie,
+} from './plex';
+
+const log = logger.child({ component: 'catalog' });
 
 export type LoadingPhase =
   | 'fetching_movies'
@@ -84,28 +92,64 @@ export function refreshFromPlex(opts: { force?: boolean } = {}): Promise<Refresh
 }
 
 async function runRefresh(): Promise<RefreshResult> {
+  const t0 = Date.now();
+  log.info('refresh start');
+
   loadingState = { phase: 'fetching_movies', startedAt: Date.now(), progress: null };
-  const movies = await listMovies();
+  let phaseT = Date.now();
+  const bulk = await listMovies();
+  log.info({ count: bulk.length, elapsedMs: Date.now() - phaseT }, 'bulk list done');
+
+  // Plex's bulk /sections/{id}/all caps each movie's cast at 3 entries; per-movie
+  // /library/metadata/{key} returns the full ~15. Refetch in parallel so the
+  // catalog has searchable cast for everyone, not just top-billed.
+  loadingState = {
+    phase: 'fetching_movies',
+    startedAt: loadingState.startedAt,
+    progress: { done: 0, total: bulk.length },
+  };
+  phaseT = Date.now();
+  const movies = await enrichWithFullMetadata(bulk, {
+    concurrency: 16,
+    onProgress: (done, total) => {
+      loadingState = {
+        phase: 'fetching_movies',
+        startedAt: loadingState?.startedAt ?? Date.now(),
+        progress: { done, total },
+      };
+    },
+  });
+  log.info({ count: movies.length, elapsedMs: Date.now() - phaseT }, 'enrich metadata done');
 
   loadingState = { phase: 'fetching_collections', startedAt: Date.now(), progress: null };
+  phaseT = Date.now();
   const collections = await listCollections();
+  log.info(
+    { count: collections.length, elapsedMs: Date.now() - phaseT },
+    'fetch collections done',
+  );
 
   loadingState = {
     phase: 'persisting',
     startedAt: Date.now(),
     progress: { done: 0, total: movies.length + collections.length },
   };
+  phaseT = Date.now();
   await persistMovies(movies);
   await persistCollections(collections);
+  log.info({ elapsedMs: Date.now() - phaseT }, 'persist done');
 
   loadingState = { phase: 'embedding', startedAt: Date.now(), progress: { done: 0, total: 0 } };
+  phaseT = Date.now();
   await syncEmbeddings(movies);
+  log.info({ elapsedMs: Date.now() - phaseT }, 'embedding sync done');
 
   await db
     .insert(catalogState)
     .values({ id: 1, lastRefreshAt: new Date() })
     .onConflictDoUpdate({ target: catalogState.id, set: { lastRefreshAt: new Date() } });
 
+  log.info({ count: movies.length, totalMs: Date.now() - t0 }, 'refresh done');
   return { count: movies.length };
 }
 
@@ -272,6 +316,10 @@ export interface SearchResult {
   }[];
 }
 
+function likePattern(s: string): string {
+  return '%' + s.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
+}
+
 function buildSearchWhere(filters: SearchFilters): SQL | undefined {
   const conds: SQL[] = [];
   if (filters.genres?.length) conds.push(arrayOverlaps(movie.genres, filters.genres));
@@ -279,12 +327,12 @@ function buildSearchWhere(filters: SearchFilters): SQL | undefined {
   if (filters.yearMax !== undefined) conds.push(lte(movie.year, filters.yearMax));
   if (filters.cast) {
     conds.push(
-      sql`EXISTS (SELECT 1 FROM unnest(${movie.topCast}) c WHERE c ILIKE ${'%' + filters.cast + '%'})`,
+      sql`EXISTS (SELECT 1 FROM unnest(${movie.topCast}) c WHERE c ILIKE ${likePattern(filters.cast)} ESCAPE '\\')`,
     );
   }
   if (filters.director) {
     conds.push(
-      sql`EXISTS (SELECT 1 FROM unnest(${movie.directors}) d WHERE d ILIKE ${'%' + filters.director + '%'})`,
+      sql`EXISTS (SELECT 1 FROM unnest(${movie.directors}) d WHERE d ILIKE ${likePattern(filters.director)} ESCAPE '\\')`,
     );
   }
   if (filters.maxRuntime !== undefined) conds.push(lte(movie.durationMin, filters.maxRuntime));

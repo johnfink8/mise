@@ -6,6 +6,7 @@ import { bus } from '@/lib/event-bus';
 import { buildFeedbackNote } from '@/lib/feedback-note';
 import { refreshFromPlex } from '@/lib/catalog';
 import { limits } from '@/lib/limits';
+import { logger } from '@/lib/logger';
 import { buildPlayUrl, getMachineIdentifier } from '@/lib/plex';
 
 export async function startSession(opts: {
@@ -67,6 +68,8 @@ interface CycleArgs {
 async function runCycle(args: CycleArgs): Promise<void> {
   const { sessionId, cycle, userPrompt, priorMessages } = args;
   const t0 = Date.now();
+  const log = logger.child({ sessionId, cycle });
+  log.info({ promptLen: userPrompt.length }, 'cycle start');
   bus.publish(sessionId, { type: 'started', data: { sessionId, cycle } });
 
   try {
@@ -94,17 +97,19 @@ async function runCycle(args: CycleArgs): Promise<void> {
         userPrompt: userContent,
         priorMessages,
         emit: {
-          onText: (turn, text) => {
+          onText: (turn, cumulativeText) => {
             bus.publish(sessionId, {
               type: 'assistant_text',
-              data: { cycle, turn, text },
+              data: { cycle, turn, text: cumulativeText },
             });
           },
-          onToolCall: (turn, toolName, input, output, durationMs) => {
+          onToolCallStarted: (turn, _toolCallId, toolName, input) => {
             bus.publish(sessionId, {
               type: 'tool_call_started',
               data: { cycle, turn, toolName, toolInput: input },
             });
+          },
+          onToolCallCompleted: (turn, _toolCallId, toolName, input, output, durationMs) => {
             bus.publish(sessionId, {
               type: 'tool_call_completed',
               data: {
@@ -168,6 +173,11 @@ async function runCycle(args: CycleArgs): Promise<void> {
     const followUp = output.follow_up_suggestion ?? null;
     followUps[cycle] = followUp;
 
+    const playlistTitles = [...(prev?.playlistTitles ?? [])];
+    while (playlistTitles.length < cycle) playlistTitles.push(null);
+    const playlistTitle = output.playlist_title ?? null;
+    playlistTitles[cycle] = playlistTitle;
+
     const allStepTexts = [
       ...(prev?.stepTexts ?? []),
       ...stepTexts.map((s) => ({ cycle, turn: s.turn, text: s.text })),
@@ -182,6 +192,7 @@ async function runCycle(args: CycleArgs): Promise<void> {
         outputTokens: (prev?.outputTokens ?? 0) + outputTokens,
         toolCallsN: (prev?.toolCallsN ?? 0) + toolCallsCount,
         followUpSuggestions: followUps,
+        playlistTitles,
         messages: allMessages,
         stepTexts: allStepTexts,
       })
@@ -227,6 +238,16 @@ async function runCycle(args: CycleArgs): Promise<void> {
       data: { cycle, recommendations: hydrated, followUpSuggestion: followUp },
     });
     bus.publish(sessionId, { type: 'done', data: {} });
+    log.info(
+      {
+        elapsedMs: Date.now() - t0,
+        recCount: hydrated.length,
+        toolCalls: toolCallsCount,
+        inputTokens,
+        outputTokens,
+      },
+      'cycle complete',
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
@@ -239,5 +260,6 @@ async function runCycle(args: CycleArgs): Promise<void> {
       .where(eq(session.id, sessionId));
     bus.publish(sessionId, { type: 'error', data: { cycle, message } });
     bus.publish(sessionId, { type: 'done', data: {} });
+    log.error({ err, elapsedMs: Date.now() - t0 }, 'cycle failed');
   }
 }

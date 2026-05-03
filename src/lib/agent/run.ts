@@ -1,5 +1,5 @@
-import type { CoreMessage } from '@mastra/core';
-import { getAgent } from './index';
+import type { CoreMessage } from '@mastra/core/llm';
+import { getAgent, loadSystemPrompt } from './index';
 import { extractJsonObject } from './parse';
 import { RecommendationOutput, type RecommendationOutputT } from './output';
 import { validateRecommendations } from './validate';
@@ -14,32 +14,107 @@ interface MastraUsage {
   outputTokens?: number;
 }
 
-interface MastraToolCall {
-  toolName?: string;
-  toolCallId?: string;
-  args?: unknown;
+/**
+ * Subset of Mastra's ChunkType union we read from `fullStream`. Mastra's full
+ * union is huge (sources, files, reasoning, routing-agent-text, etc.); we
+ * only dispatch on these and ignore the rest. The `payload` shapes mirror
+ * Mastra's `TextDeltaPayload` / `ToolCallPayload` / `ToolResultPayload` /
+ * `StepFinishPayload`.
+ */
+interface BaseChunk {
+  type: string;
+  payload?: unknown;
+}
+interface StepStartChunk {
+  type: 'step-start';
+}
+interface TextDeltaChunk {
+  type: 'text-delta';
+  payload: { text?: string };
+}
+interface ToolCallChunkLike {
+  type: 'tool-call';
+  payload: { toolName?: string; toolCallId?: string; args?: unknown };
+}
+interface ToolResultChunkLike {
+  type: 'tool-result';
+  payload: {
+    toolName?: string;
+    toolCallId?: string;
+    args?: unknown;
+    result?: unknown;
+  };
+}
+interface StepFinishChunkLike {
+  type: 'step-finish';
+  payload: { output?: { usage?: MastraUsage } };
 }
 
-interface MastraToolResult {
-  toolCallId?: string;
-  result?: unknown;
+function isTextDelta(c: BaseChunk): c is TextDeltaChunk {
+  return c.type === 'text-delta';
+}
+function isToolCall(c: BaseChunk): c is ToolCallChunkLike {
+  return c.type === 'tool-call';
+}
+function isToolResult(c: BaseChunk): c is ToolResultChunkLike {
+  return c.type === 'tool-result';
+}
+function isStepFinish(c: BaseChunk): c is StepFinishChunkLike {
+  return c.type === 'step-finish';
+}
+function isStepStart(c: BaseChunk): c is StepStartChunk {
+  return c.type === 'step-start';
 }
 
 /**
- * Subset of Mastra's onStepFinish callback argument that we actually read.
- * Mastra's full type is wider; this narrows to the fields we use.
+ * Trim the trailing JSON output from a turn's text so it doesn't show up in
+ * the narration ribbon or get persisted. The agent's final-cycle response
+ * appends the recommendations JSON to its prose; we only want the prose.
+ *
+ * Two cases handled in priority order:
+ *   1. ```json ... ``` (or ``` ... ```) markdown fence → strip from the fence
+ *   2. Bare {"recommendations": ... } JSON object → strip from the brace
+ *
+ * Earlier-step text doesn't contain these patterns, so this is mostly a
+ * no-op until the final step.
  */
-interface MastraStepInfo {
-  text?: string;
-  usage?: MastraUsage;
-  toolCalls?: MastraToolCall[];
-  toolResults?: MastraToolResult[];
+/**
+ * Wrap untrusted user input in a delimited block so the model treats it as
+ * data rather than a continuation of the system prompt. The closing tag
+ * is duplicated in the system prompt; any `</user_request>` in the input
+ * itself is neutralized so the user can't forge an early close.
+ */
+function wrapUserInput(s: string): string {
+  const safe = s.replace(/<\/?user_request>/gi, '');
+  return `<user_request>\n${safe}\n</user_request>`;
+}
+
+function stripFinalJsonTail(text: string): string {
+  const fenceIdx = text.indexOf('```');
+  if (fenceIdx !== -1) return text.slice(0, fenceIdx).trimEnd();
+  const m = text.match(/\{\s*"recommendations"/);
+  if (m && m.index !== undefined) return text.slice(0, m.index).trimEnd();
+  return text;
 }
 
 export interface AgentRunEvents {
-  onText: (turn: number, text: string) => void;
-  onToolCall: (
+  /**
+   * Cumulative text for `turn` so far. Fires repeatedly as `text-delta` chunks
+   * arrive — each fire is the full text up to that point. The caller treats
+   * latest-received-per-turn as authoritative.
+   */
+  onText: (turn: number, cumulativeText: string) => void;
+  /** Fires once per tool call, the moment the model emits the call. */
+  onToolCallStarted: (
     turn: number,
+    toolCallId: string,
+    toolName: string,
+    input: Record<string, unknown>,
+  ) => void;
+  /** Fires once per tool call, when the tool's execute() returns. */
+  onToolCallCompleted: (
+    turn: number,
+    toolCallId: string,
     toolName: string,
     input: Record<string, unknown>,
     output: unknown,
@@ -83,7 +158,21 @@ export async function runAgentCycle(args: {
   let lastText = '';
   let turn = 0;
 
-  const messages: CoreMessage[] = [...priorMessages, { role: 'user', content: userPrompt }];
+  // Build the message list with the system prompt up front, marked with an
+  // Anthropic ephemeral cache breakpoint. Tool definitions are emitted by the
+  // SDK before the system message, so a single breakpoint here covers both
+  // the system prompt and the tool schemas — the bulk of every cycle's
+  // input. Cache TTL is 5 minutes; in-session follow-ups land within that.
+  const systemPrompt = await loadSystemPrompt();
+  const messages: CoreMessage[] = [
+    {
+      role: 'system',
+      content: systemPrompt,
+      providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+    },
+    ...priorMessages,
+    { role: 'user', content: wrapUserInput(userPrompt) },
+  ];
   const stepTexts: { turn: number; text: string }[] = [];
 
   const ac = new AbortController();
@@ -109,45 +198,114 @@ export async function runAgentCycle(args: {
 
   try {
     for (let attempt = 0; attempt <= limits.validationRetries; attempt++) {
-      const onStepFinish = (step: MastraStepInfo) => {
-        turn += 1;
-        totalIn += Number(step.usage?.promptTokens ?? step.usage?.inputTokens ?? 0);
-        totalOut += Number(step.usage?.completionTokens ?? step.usage?.outputTokens ?? 0);
-        if (totalIn + totalOut > limits.cycleTokenBudget && !ac.signal.aborted) {
-          abortReason = 'cycle_token_budget';
-          ac.abort();
-        }
-        const text = String(step.text ?? '').trim();
-        if (text) {
-          stepTexts.push({ turn, text });
-          emit?.onText(turn, text);
-        }
-        const tcs = step.toolCalls ?? [];
-        const trs = step.toolResults ?? [];
-        const resByCall = new Map(trs.map((r) => [r.toolCallId, r]));
-        for (const tc of tcs) {
-          const tr = resByCall.get(tc.toolCallId);
-          const toolName = tc.toolName ?? '?';
-          const input = (tc.args ?? {}) as Record<string, unknown>;
-          const output = tr?.result ?? null;
-          toolCallsCount += 1;
-          emit?.onToolCall(turn, toolName, input, output, 0);
-        }
-      };
-
-      const result = await agent
-        .generate(messages, {
+      // `agent.stream()` returns immediately with a MastraModelOutput whose
+      // `fullStream` is a ReadableStream of typed chunks. We dispatch on chunk
+      // type and emit our own SSE events as they arrive — no buffering until
+      // the whole step finishes.
+      const output = await agent
+        .stream(messages, {
           maxSteps: limits.agentMaxSteps,
           abortSignal: ac.signal,
           providerOptions,
-          onStepFinish,
         })
         .catch((err: unknown) => {
           if (abortReason) throw new CycleAbortError(abortReason);
           throw err;
         });
 
-      lastText = String(result.text ?? '');
+      // Per-turn state. `turn` increments at each step boundary; the model's
+      // text streams as `text-delta` chunks tagged by turn. `toolCallStarts`
+      // records when a tool-call chunk arrived so the matching tool-result
+      // chunk can compute a real duration.
+      const textByTurn = new Map<number, string>();
+      const toolCallStarts = new Map<string, { t0: number; turnAt: number }>();
+      let stepStarted = false;
+      let lastStepTextLen = 0;
+
+      const reader = output.fullStream.getReader();
+      try {
+        while (true) {
+          let chunk: BaseChunk | undefined;
+          try {
+            const r = await reader.read();
+            if (r.done) break;
+            chunk = r.value as BaseChunk;
+          } catch (err) {
+            if (abortReason) throw new CycleAbortError(abortReason);
+            throw err;
+          }
+          if (!chunk) continue;
+
+          if (isStepStart(chunk)) {
+            turn += 1;
+            stepStarted = true;
+            lastStepTextLen = 0;
+            textByTurn.set(turn, '');
+          } else if (isTextDelta(chunk)) {
+            if (!stepStarted) {
+              // Some models emit text without a leading step-start; treat the
+              // first text chunk as starting turn 1.
+              turn += 1;
+              stepStarted = true;
+              textByTurn.set(turn, '');
+            }
+            const delta = chunk.payload.text ?? '';
+            const next = (textByTurn.get(turn) ?? '') + delta;
+            textByTurn.set(turn, next);
+            // Strip the JSON tail from the *displayed* text so the narration
+            // ribbon never shows the recommendations blob.
+            emit?.onText(turn, stripFinalJsonTail(next));
+          } else if (isToolCall(chunk)) {
+            const p = chunk.payload;
+            const toolName = p.toolName ?? '?';
+            const toolCallId = p.toolCallId ?? `${turn}-${toolCallsCount}`;
+            const input = (p.args ?? {}) as Record<string, unknown>;
+            toolCallsCount += 1;
+            toolCallStarts.set(toolCallId, { t0: Date.now(), turnAt: turn });
+            emit?.onToolCallStarted(turn, toolCallId, toolName, input);
+          } else if (isToolResult(chunk)) {
+            const p = chunk.payload;
+            const toolName = p.toolName ?? '?';
+            const toolCallId = p.toolCallId ?? '';
+            const input = (p.args ?? {}) as Record<string, unknown>;
+            const started = toolCallStarts.get(toolCallId);
+            const durationMs = started ? Date.now() - started.t0 : 0;
+            const startedTurn = started?.turnAt ?? turn;
+            emit?.onToolCallCompleted(
+              startedTurn,
+              toolCallId,
+              toolName,
+              input,
+              p.result ?? null,
+              durationMs,
+            );
+            toolCallStarts.delete(toolCallId);
+          } else if (isStepFinish(chunk)) {
+            const usage = chunk.payload.output?.usage;
+            if (usage) {
+              totalIn += Number(usage.promptTokens ?? usage.inputTokens ?? 0);
+              totalOut += Number(usage.completionTokens ?? usage.outputTokens ?? 0);
+            }
+            if (totalIn + totalOut > limits.cycleTokenBudget && !ac.signal.aborted) {
+              abortReason = 'cycle_token_budget';
+              ac.abort();
+            }
+            // Snapshot the turn's final text — minus any JSON tail — into
+            // stepTexts for later replay in the REASONING expansion.
+            const stripped = stripFinalJsonTail(textByTurn.get(turn) ?? '').trim();
+            if (stripped && stripped.length > lastStepTextLen) {
+              stepTexts.push({ turn, text: stripped });
+              lastStepTextLen = stripped.length;
+            }
+            stepStarted = false;
+          }
+          // 'finish', 'reasoning', 'source', etc. — irrelevant for our flow.
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      lastText = (await output.text) ?? '';
 
       const fail = (nudge: string) => {
         messages.push({ role: 'assistant', content: lastText || '(no text emitted)' });

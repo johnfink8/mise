@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import { Icon } from '@/components/Icon';
 import type { SessionStatus } from './types';
@@ -8,6 +10,8 @@ interface Props {
   showHistory?: boolean;
   /** Render a "+ NEW" link back to the home page. */
   showNew?: boolean;
+  /** Render a "+ PLAYLIST" shortcut that scrolls to the end-of-programme card. */
+  showPlaylistShortcut?: boolean;
 }
 
 export function LobbyTopBar({
@@ -15,6 +19,7 @@ export function LobbyTopBar({
   resultCount,
   showHistory = true,
   showNew = false,
+  showPlaylistShortcut = false,
 }: Props) {
   const label =
     status === 'initial'
@@ -45,6 +50,21 @@ export function LobbyTopBar({
         {label}
       </div>
       <div className="flex items-center gap-4">
+        {showPlaylistShortcut && (
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.querySelector('[data-mise-end-card]');
+              if (!(el instanceof HTMLElement)) return;
+              const top = el.getBoundingClientRect().top + window.scrollY - 80;
+              window.scrollTo({ top, behavior: 'smooth' });
+            }}
+            className={`${navLinkClass} cursor-pointer bg-transparent p-0`}
+          >
+            <span className="text-mise-accent">+</span>
+            PLAYLIST
+          </button>
+        )}
         {showNew && (
           <Link href="/" className={navLinkClass}>
             <Icon name="plus" size={13} />

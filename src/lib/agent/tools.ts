@@ -96,21 +96,21 @@ export const searchMoviesTool = createTool({
     ranked_by: z.string(),
     results: z.array(z.any()),
   }),
-  execute: async ({ context }) => {
+  execute: async (input) => {
     const filters: SearchFilters = {
-      query: context.query,
-      genres: context.genres,
-      yearMin: context.year_min,
-      yearMax: context.year_max,
-      cast: context.cast,
-      director: context.director,
-      maxRuntime: context.max_runtime,
-      minAudienceRating: context.min_audience_rating,
-      watchedStatus: context.watched_status,
-      inCollection: context.in_collection,
-      addedAfter: context.added_after,
-      sort: context.sort,
-      limit: context.limit,
+      query: input.query,
+      genres: input.genres,
+      yearMin: input.year_min,
+      yearMax: input.year_max,
+      cast: input.cast,
+      director: input.director,
+      maxRuntime: input.max_runtime,
+      minAudienceRating: input.min_audience_rating,
+      watchedStatus: input.watched_status,
+      inCollection: input.in_collection,
+      addedAfter: input.added_after,
+      sort: input.sort,
+      limit: input.limit,
     };
     const r = await search(filters);
     return {
@@ -127,9 +127,9 @@ export const getMovieDetailsTool = createTool({
   description: 'Get full metadata for a single movie by rating_key.',
   inputSchema: z.object({ rating_key: z.string() }),
   outputSchema: z.any(),
-  execute: async ({ context }) => {
-    const m = await getMovie(context.rating_key);
-    if (!m) return { error: `unknown rating_key=${context.rating_key}` };
+  execute: async (input) => {
+    const m = await getMovie(input.rating_key);
+    if (!m) return { error: `unknown rating_key=${input.rating_key}` };
     return fullMovie(m);
   },
 });
@@ -143,8 +143,8 @@ export const getUserHistoryTool = createTool({
     sort: z.enum(['recent', 'most_watched']).default('recent'),
   }),
   outputSchema: z.object({ count: z.number(), results: z.array(z.any()) }),
-  execute: async ({ context }) => {
-    const rows = await userHistory({ limit: context.limit, sort: context.sort });
+  execute: async (input) => {
+    const rows = await userHistory({ limit: input.limit, sort: input.sort });
     return { count: rows.length, results: rows.map(compactMovie) };
   },
 });
@@ -158,8 +158,8 @@ export const getSimilarToTool = createTool({
     k: z.number().int().min(1).max(25).default(10),
   }),
   outputSchema: z.object({ count: z.number(), results: z.array(z.any()) }),
-  execute: async ({ context }) => {
-    const rows = await similarTo(context.rating_key, context.k);
+  execute: async (input) => {
+    const rows = await similarTo(input.rating_key, input.k);
     return { count: rows.length, results: rows.map(compactMovie) };
   },
 });

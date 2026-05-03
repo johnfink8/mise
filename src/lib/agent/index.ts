@@ -6,17 +6,24 @@ import { tools } from './tools';
 
 export const DEFAULT_MODEL = 'claude-sonnet-4-5';
 
-async function loadSystemPrompt(): Promise<string> {
+export async function loadSystemPrompt(): Promise<string> {
   return (
     await readFile(path.join(process.cwd(), 'prompts', 'system.md'), 'utf8')
   ).trim();
 }
 
+/**
+ * The Agent is constructed without `instructions`. We pass the system prompt
+ * as the first message in `agent.generate()` so we can attach Anthropic
+ * cache-control metadata to it (see runAgentCycle). Caching the system
+ * message also implicitly caches the tool definitions that precede it in the
+ * Anthropic API request, which is the bulk of our prompt size.
+ */
 export async function getAgent(model: string = DEFAULT_MODEL): Promise<Agent> {
-  const instructions = await loadSystemPrompt();
   return new Agent({
+    id: 'mise',
     name: 'mise',
-    instructions,
+    instructions: '',
     model: anthropic(model),
     tools,
   });

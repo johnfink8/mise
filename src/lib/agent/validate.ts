@@ -51,10 +51,15 @@ export async function validateRecommendations(
   }
 
   const followUp = output.follow_up_suggestion?.trim().slice(0, 120) || null;
+  const playlistTitle = output.playlist_title.trim().slice(0, 60);
 
   return {
     ok: true,
-    cleaned: { recommendations: cleaned, follow_up_suggestion: followUp },
+    cleaned: {
+      recommendations: cleaned,
+      follow_up_suggestion: followUp,
+      playlist_title: playlistTitle,
+    },
     dropped,
   };
 }

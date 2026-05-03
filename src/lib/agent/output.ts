@@ -27,6 +27,13 @@ export const RecommendationOutput = z.object({
     .describe(
       "OPTIONAL one-line refinement written in the user's voice (lowercase, casual, no period, ≤60 chars). Used as the chat-input placeholder for the next prompt.",
     ),
+  playlist_title: z
+    .string()
+    .min(1)
+    .max(60)
+    .describe(
+      'Short evocative noun phrase (≤60 chars, lowercase, no surrounding quotes) that captures the spirit of the picks. Used as a Plex playlist name when the user saves the results.',
+    ),
 });
 
 export type RecommendationOutputT = z.infer<typeof RecommendationOutput>;

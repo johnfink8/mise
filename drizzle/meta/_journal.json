@@ -22,6 +22,20 @@
       "when": 1777752356750,
       "tag": "0002_cheerful_proteus",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777768675139,
+      "tag": "0003_mixed_morlocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777769529463,
+      "tag": "0004_medical_vision",
+      "breakpoints": true
     }
   ]
 }

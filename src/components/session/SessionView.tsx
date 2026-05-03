@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { LobbyInput } from './LobbyInput';
 import { LobbyTopBar } from './LobbyTopBar';
 import { LobbyTurn } from './LobbyTurn';
+import { SaveToPlex } from './SaveToPlex';
 import { ThinkingBlock } from './ThinkingBlock';
 import { useSessionStream } from './useSessionStream';
 import type {
@@ -61,7 +62,18 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
       setStreamDone(false);
       setStreamError(null);
     },
-    onAssistantText: (t) => setLiveText((prev) => [...prev, t]),
+    onAssistantText: (t) =>
+      setLiveText((prev) => {
+        // Streaming sends cumulative text per (cycle, turn) — replace the
+        // existing entry rather than appending.
+        const idx = prev.findIndex((x) => x.cycle === t.cycle && x.turn === t.turn);
+        if (idx >= 0) {
+          const next = prev.slice();
+          next[idx] = t;
+          return next;
+        }
+        return [...prev, t];
+      }),
     onToolCallStarted: (c) =>
       setLiveCalls((prev) => [...prev, { ...c, done: false }]),
     onToolCallCompleted: (c) =>
@@ -134,7 +146,12 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <LobbyTopBar status={status} resultCount={totalRecCount} showNew />
+      <LobbyTopBar
+        status={status}
+        resultCount={totalRecCount}
+        showNew
+        showPlaylistShortcut={status === 'complete' && totalRecCount > 0}
+      />
 
       <div className="mx-auto w-full max-w-[980px] flex-1 px-5 pb-7 sm:px-7">
         {(streamError ?? initial.errorMessage) && (
@@ -175,6 +192,10 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
             />
           );
         })}
+
+        {status === 'complete' && totalRecCount > 0 && (
+          <SaveToPlex sessionId={initial.id} count={totalRecCount} />
+        )}
       </div>
 
       <LobbyInput

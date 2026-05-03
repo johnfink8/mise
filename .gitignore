@@ -11,3 +11,4 @@ dist/
 next-env.d.ts
 docs/plans
 *.tsbuildinfo
+.mastra
