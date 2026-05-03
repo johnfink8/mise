@@ -71,7 +71,3 @@ The Mastra dev playground (`src/mastra/index.ts`) constructs its **own** agent i
 ## Tuning knobs (env vars)
 
 `MISE_CYCLE_TIMEOUT_MS`, `MISE_CYCLE_TOKEN_BUDGET`, `MISE_SESSION_TOKEN_CEILING`, `MISE_VALIDATION_RETRIES`, `MISE_AGENT_MAX_STEPS`, `MISE_THINKING_BUDGET_TOKENS`, `MISE_CATALOG_CRON` — all defined in `src/lib/limits.ts` with defaults tuned for single-user local use on Sonnet 4.5.
-
-## Commit messages
-
-Match the size of the change. One-line fix → one-line message. Don't write a paragraph explaining a one-statement diff. `git log` shows the tone.
