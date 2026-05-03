@@ -2,6 +2,10 @@
   "name": "mise",
   "version": "0.0.0",
   "private": true,
+  "description": "A Plex movie recommender powered by an Anthropic agent",
+  "repository": "github:johnfink8/mise",
+  "author": "John Fink",
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
