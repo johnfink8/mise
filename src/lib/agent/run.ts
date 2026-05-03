@@ -80,12 +80,14 @@ function isStepStart(c: BaseChunk): c is StepStartChunk {
  */
 /**
  * Wrap untrusted user input in a delimited block so the model treats it as
- * data rather than a continuation of the system prompt. The closing tag
- * is duplicated in the system prompt; any `</user_request>` in the input
- * itself is neutralized so the user can't forge an early close.
+ * data rather than a continuation of the system prompt. Any `<` or `>` in
+ * the input is HTML-entity-encoded so the user can't forge a closing tag
+ * (or any tag-shaped sequence the model might latch onto). Claude reads
+ * `&lt;`/`&gt;` fluently, so meaning is preserved — "&lt; 90 min" still
+ * parses as "less than 90 min".
  */
 function wrapUserInput(s: string): string {
-  const safe = s.replace(/<\/?user_request>/gi, '');
+  const safe = s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<user_request>\n${safe}\n</user_request>`;
 }
 
