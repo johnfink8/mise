@@ -98,6 +98,8 @@ When you are ready, your final response must be a JSON object with this shape:
       { "rating_key": "<from a tool result>", "reasoning": "<1-2 sentences>", "group": "<optional label>" },
       ...
     ],
+    "playlist_title": "<short noun phrase>",
+    "playlist_summary": "<one or two sentences>",
     "follow_up_suggestion": "<optional one-line refinement>"
   }
 
@@ -131,6 +133,15 @@ Examples:
 - For "comedy night but no romcoms please" → "laughs, no kissing"
 - For "what's good tonight, surprise me" → "tonight's programme"
 - For a focused "more like Arrival" → "cerebral first contact"
+
+## Playlist summary
+Always include a `playlist_summary` field — one or two sentences (≤280 chars)
+describing the through-line of the picks: what binds them, what mood or angle
+they share. Saved as the Plex playlist's summary, so the reader is looking at
+a flat list of films in any Plex client — don't reference `group` labels or
+buckets (those only appear in mise's UI). Write it for the user opening the
+playlist next week, not as a recap of your reasoning. No preamble like "this
+playlist contains".
 
 ## Follow-ups
 The user may send follow-up messages refining their previous request ("nothing too

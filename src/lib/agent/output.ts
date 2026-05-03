@@ -34,6 +34,13 @@ export const RecommendationOutput = z.object({
     .describe(
       'Short evocative noun phrase (≤60 chars, lowercase, no surrounding quotes) that captures the spirit of the picks. Used as a Plex playlist name when the user saves the results.',
     ),
+  playlist_summary: z
+    .string()
+    .min(1)
+    .max(280)
+    .describe(
+      'One or two sentences (≤280 chars) describing the through-line of the picks — what binds them, what mood they set. Saved as the Plex playlist summary so the user sees it in any Plex client.',
+    ),
 });
 
 export type RecommendationOutputT = z.infer<typeof RecommendationOutput>;

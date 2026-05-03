@@ -178,6 +178,11 @@ async function runCycle(args: CycleArgs): Promise<void> {
     const playlistTitle = output.playlist_title ?? null;
     playlistTitles[cycle] = playlistTitle;
 
+    const playlistSummaries = [...(prev?.playlistSummaries ?? [])];
+    while (playlistSummaries.length < cycle) playlistSummaries.push(null);
+    const playlistSummary = output.playlist_summary ?? null;
+    playlistSummaries[cycle] = playlistSummary;
+
     const allStepTexts = [
       ...(prev?.stepTexts ?? []),
       ...stepTexts.map((s) => ({ cycle, turn: s.turn, text: s.text })),
@@ -193,6 +198,7 @@ async function runCycle(args: CycleArgs): Promise<void> {
         toolCallsN: (prev?.toolCallsN ?? 0) + toolCallsCount,
         followUpSuggestions: followUps,
         playlistTitles,
+        playlistSummaries,
         messages: allMessages,
         stepTexts: allStepTexts,
       })

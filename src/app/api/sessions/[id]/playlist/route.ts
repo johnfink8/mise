@@ -42,9 +42,11 @@ export async function POST(
     agentTitle?.trim() ||
     detail.session.userPrompt.replace(/\s+/g, ' ').trim().slice(0, 50);
   const title = TITLE_PREFIX + baseTitle;
+  const summary =
+    (detail.session.playlistSummaries ?? [])[latestCycle]?.trim() || null;
 
   try {
-    const result = await upsertMoviePlaylist({ title, ratingKeys });
+    const result = await upsertMoviePlaylist({ title, summary, ratingKeys });
     log.info(
       {
         count: ratingKeys.length,

@@ -232,6 +232,7 @@ export async function enrichWithFullMetadata(
  */
 export async function createMoviePlaylist(opts: {
   title: string;
+  summary?: string | null;
   ratingKeys: string[];
 }): Promise<{ ratingKey: string; deepLink: string | null; title: string }> {
   if (opts.ratingKeys.length === 0) {
@@ -265,6 +266,13 @@ export async function createMoviePlaylist(opts: {
     throw new Error('plex playlist create returned no metadata');
   }
   const ratingKey = String(created.ratingKey);
+
+  // Plex's POST /playlists doesn't accept a summary param, so set it via the
+  // standard metadata edit endpoint after creation.
+  if (opts.summary && opts.summary.trim().length > 0) {
+    await setPlaylistSummary(ratingKey, opts.summary);
+  }
+
   const deepLink =
     `https://app.plex.tv/desktop/#!/server/${machineId}/playlist?key=` +
     encodeURIComponent(`/playlists/${ratingKey}`);
@@ -319,6 +327,19 @@ async function setPlaylistTitle(ratingKey: string, title: string): Promise<void>
   });
   if (!res.ok) {
     throw new Error(`plex playlist rename ${res.status} ${res.statusText}`);
+  }
+}
+
+async function setPlaylistSummary(ratingKey: string, summary: string): Promise<void> {
+  const url = new URL(baseUrl() + `/library/metadata/${ratingKey}`);
+  url.searchParams.set('summary.value', summary);
+  url.searchParams.set('summary.locked', '1');
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { Accept: 'application/json', 'X-Plex-Token': token() },
+  });
+  if (!res.ok) {
+    throw new Error(`plex playlist summary ${res.status} ${res.statusText}`);
   }
 }
 
@@ -389,6 +410,7 @@ async function addPlaylistItems(
  */
 export async function upsertMoviePlaylist(opts: {
   title: string;
+  summary?: string | null;
   ratingKeys: string[];
 }): Promise<{
   ratingKey: string;
@@ -408,6 +430,7 @@ export async function upsertMoviePlaylist(opts: {
   if (managed.length === 0) {
     const created = await createMoviePlaylist({
       title: opts.title,
+      summary: opts.summary,
       ratingKeys: opts.ratingKeys,
     });
     return { ...created, created: true };
@@ -421,6 +444,9 @@ export async function upsertMoviePlaylist(opts: {
   }
 
   await setPlaylistTitle(keep.ratingKey, opts.title);
+  if (opts.summary && opts.summary.trim().length > 0) {
+    await setPlaylistSummary(keep.ratingKey, opts.summary);
+  }
   await clearPlaylistItems(keep.ratingKey);
   await addPlaylistItems(keep.ratingKey, opts.ratingKeys, machineId);
   return {

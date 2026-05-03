@@ -85,6 +85,10 @@ export const session = pgTable('session', {
     .$type<(string | null)[]>()
     .notNull()
     .default(sql`'[]'::jsonb`),
+  playlistSummaries: jsonb('playlist_summaries')
+    .$type<(string | null)[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   messages: jsonb('messages')
     .$type<Array<{ role: string; content: unknown }>>()
     .notNull()

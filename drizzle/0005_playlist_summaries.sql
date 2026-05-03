@@ -1,0 +1,1 @@
+ALTER TABLE "session" ADD COLUMN "playlist_summaries" jsonb DEFAULT '[]'::jsonb NOT NULL;

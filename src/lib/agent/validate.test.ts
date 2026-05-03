@@ -34,7 +34,8 @@ describe('validateRecommendations', () => {
     const r = await validateRecommendations({
       recommendations: [],
       follow_up_suggestion: null,
-      playlist_title: "test list",
+      playlist_title: 'test list',
+      playlist_summary: 'test summary',
     });
     expect(r.ok).toBe(false);
     expect(r.retryMessage).toMatch(/zero recommendations/);
@@ -48,7 +49,8 @@ describe('validateRecommendations', () => {
         { rating_key: 'fake2', reasoning: '...', group: null },
       ],
       follow_up_suggestion: null,
-      playlist_title: "test list",
+      playlist_title: 'test list',
+      playlist_summary: 'test summary',
     });
     expect(r.ok).toBe(false);
     expect(r.retryMessage).toMatch(/None of the rating_keys/);
@@ -66,6 +68,7 @@ describe('validateRecommendations', () => {
       ],
       follow_up_suggestion: 'shorter',
       playlist_title: 'test list',
+      playlist_summary: 'test summary',
     });
     expect(r.ok).toBe(true);
     expect(r.cleaned!.recommendations.map((x) => x.rating_key)).toEqual([
@@ -86,7 +89,8 @@ describe('validateRecommendations', () => {
         },
       ],
       follow_up_suggestion: null,
-      playlist_title: "test list",
+      playlist_title: 'test list',
+      playlist_summary: 'test summary',
     });
     expect(r.ok).toBe(true);
     const rec = r.cleaned!.recommendations[0];
@@ -99,7 +103,8 @@ describe('validateRecommendations', () => {
     const r = await validateRecommendations({
       recommendations: [{ rating_key: 'real1', reasoning: '...', group: '   ' }],
       follow_up_suggestion: null,
-      playlist_title: "test list",
+      playlist_title: 'test list',
+      playlist_summary: 'test summary',
     });
     expect(r.cleaned!.recommendations[0].group).toBeNull();
   });
@@ -110,7 +115,8 @@ describe('validateRecommendations', () => {
     const r = await validateRecommendations({
       recommendations: [{ rating_key: 'real1', reasoning: '...', group: null }],
       follow_up_suggestion: long,
-      playlist_title: "test list",
+      playlist_title: 'test list',
+      playlist_summary: 'test summary',
     });
     expect(r.cleaned!.follow_up_suggestion?.length).toBe(120);
   });
@@ -120,7 +126,8 @@ describe('validateRecommendations', () => {
     const r = await validateRecommendations({
       recommendations: [{ rating_key: 'real1', reasoning: '...', group: null }],
       follow_up_suggestion: null,
-      playlist_title: "test list",
+      playlist_title: 'test list',
+      playlist_summary: 'test summary',
     });
     expect(r.cleaned!.follow_up_suggestion).toBeNull();
   });
@@ -131,7 +138,19 @@ describe('validateRecommendations', () => {
       recommendations: [{ rating_key: 'real1', reasoning: '...', group: null }],
       follow_up_suggestion: null,
       playlist_title: '   ' + 'x'.repeat(120) + '   ',
+      playlist_summary: 'test summary',
     });
     expect(r.cleaned!.playlist_title).toBe('x'.repeat(60));
+  });
+
+  it('trims and caps playlist_summary at 280 chars', async () => {
+    await seedKey('real1');
+    const r = await validateRecommendations({
+      recommendations: [{ rating_key: 'real1', reasoning: '...', group: null }],
+      follow_up_suggestion: null,
+      playlist_title: 'test list',
+      playlist_summary: '   ' + 'y'.repeat(400) + '   ',
+    });
+    expect(r.cleaned!.playlist_summary).toBe('y'.repeat(280));
   });
 });

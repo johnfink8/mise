@@ -52,6 +52,7 @@ export async function validateRecommendations(
 
   const followUp = output.follow_up_suggestion?.trim().slice(0, 120) || null;
   const playlistTitle = output.playlist_title.trim().slice(0, 60);
+  const playlistSummary = output.playlist_summary.trim().slice(0, 280);
 
   return {
     ok: true,
@@ -59,6 +60,7 @@ export async function validateRecommendations(
       recommendations: cleaned,
       follow_up_suggestion: followUp,
       playlist_title: playlistTitle,
+      playlist_summary: playlistSummary,
     },
     dropped,
   };
