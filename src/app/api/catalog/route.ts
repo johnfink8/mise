@@ -3,6 +3,7 @@ import {
   dataAgeSeconds,
   embeddedCount,
   getCollections,
+  getLastRefreshInfo,
   getLoadingState,
   movieCount,
   refreshFromPlex,
@@ -20,6 +21,7 @@ export async function GET() {
     getCollections(),
   ]);
   const loading = getLoadingState();
+  const lastRefresh = getLastRefreshInfo();
   return NextResponse.json({
     count: movies,
     embedded,
@@ -32,10 +34,20 @@ export async function GET() {
           progress: loading.progress,
         }
       : null,
+    last_refresh: lastRefresh
+      ? {
+          attempted_seconds_ago: Math.floor((Date.now() - lastRefresh.attemptedAt) / 1000),
+          error: lastRefresh.error,
+        }
+      : null,
   });
 }
 
 export async function POST() {
-  const result = await refreshFromPlex({ force: true });
-  return NextResponse.json({ count: result.count });
+  // Fire-and-forget: refreshFromPlex() sets loadingState synchronously, so the
+  // next GET will immediately reflect the in-flight refresh. We don't await
+  // here because a full refresh takes minutes and the client just wants to
+  // know the kickoff happened so it can start polling.
+  void refreshFromPlex({ force: true }).catch(() => undefined);
+  return NextResponse.json({ kicked_off: true });
 }

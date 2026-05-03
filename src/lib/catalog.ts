@@ -49,11 +49,40 @@ interface RefreshResult {
   count: number;
 }
 
-let refreshPromise: Promise<RefreshResult> | null = null;
-let loadingState: LoadingState | null = null;
+export interface LastRefreshInfo {
+  attemptedAt: number;
+  error: string | null;
+}
+
+interface CatalogShared {
+  refreshPromise: Promise<RefreshResult> | null;
+  loadingState: LoadingState | null;
+  lastRefresh: LastRefreshInfo | null;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __miseCatalog: CatalogShared | undefined;
+}
+
+// Shared on globalThis so the page server-component, the /api/catalog route
+// handler, the cron tick in instrumentation.ts, and the agent's tools all see
+// the same in-flight refresh / last-attempt state. Without this, Next.js dev
+// (and any environment with multiple module instances) ends up with one
+// instance kicking off the refresh while another reports loadingState=null.
+const shared: CatalogShared = globalThis.__miseCatalog ?? {
+  refreshPromise: null,
+  loadingState: null,
+  lastRefresh: null,
+};
+if (process.env.NODE_ENV !== 'production') globalThis.__miseCatalog = shared;
 
 export function getLoadingState(): LoadingState | null {
-  return loadingState;
+  return shared.loadingState;
+}
+
+export function getLastRefreshInfo(): LastRefreshInfo | null {
+  return shared.lastRefresh;
 }
 
 export async function dataAgeSeconds(): Promise<number | null> {
@@ -73,29 +102,45 @@ export async function embeddedCount(): Promise<number> {
 }
 
 export function refreshFromPlex(opts: { force?: boolean } = {}): Promise<RefreshResult> {
-  if (refreshPromise) return refreshPromise;
-  refreshPromise = (async () => {
+  if (shared.refreshPromise) return shared.refreshPromise;
+  // Set a placeholder loading state synchronously so callers checking
+  // getLoadingState() right after kickoff see "we started something" — without
+  // it there's a gap between this call and runRefresh's first await during
+  // which getLoadingState() still reports null.
+  shared.loadingState = { phase: 'fetching_movies', startedAt: Date.now(), progress: null };
+  const attemptedAt = Date.now();
+  shared.refreshPromise = (async () => {
     try {
       if (!opts.force) {
         const age = await dataAgeSeconds();
         if (age !== null && age < 60 * 60 * 24) {
-          return { count: await movieCount() };
+          const result = { count: await movieCount() };
+          shared.lastRefresh = { attemptedAt, error: null };
+          return result;
         }
       }
-      return await runRefresh();
+      const result = await runRefresh();
+      shared.lastRefresh = { attemptedAt, error: null };
+      return result;
+    } catch (e) {
+      shared.lastRefresh = {
+        attemptedAt,
+        error: e instanceof Error ? e.message : String(e),
+      };
+      throw e;
     } finally {
-      refreshPromise = null;
-      loadingState = null;
+      shared.refreshPromise = null;
+      shared.loadingState = null;
     }
   })();
-  return refreshPromise;
+  return shared.refreshPromise;
 }
 
 async function runRefresh(): Promise<RefreshResult> {
   const t0 = Date.now();
   log.info('refresh start');
 
-  loadingState = { phase: 'fetching_movies', startedAt: Date.now(), progress: null };
+  shared.loadingState = { phase: 'fetching_movies', startedAt: Date.now(), progress: null };
   let phaseT = Date.now();
   const bulk = await listMovies();
   log.info({ count: bulk.length, elapsedMs: Date.now() - phaseT }, 'bulk list done');
@@ -103,25 +148,25 @@ async function runRefresh(): Promise<RefreshResult> {
   // Plex's bulk /sections/{id}/all caps each movie's cast at 3 entries; per-movie
   // /library/metadata/{key} returns the full ~15. Refetch in parallel so the
   // catalog has searchable cast for everyone, not just top-billed.
-  loadingState = {
+  shared.loadingState = {
     phase: 'fetching_movies',
-    startedAt: loadingState.startedAt,
+    startedAt: shared.loadingState.startedAt,
     progress: { done: 0, total: bulk.length },
   };
   phaseT = Date.now();
   const movies = await enrichWithFullMetadata(bulk, {
     concurrency: 16,
     onProgress: (done, total) => {
-      loadingState = {
+      shared.loadingState = {
         phase: 'fetching_movies',
-        startedAt: loadingState?.startedAt ?? Date.now(),
+        startedAt: shared.loadingState?.startedAt ?? Date.now(),
         progress: { done, total },
       };
     },
   });
   log.info({ count: movies.length, elapsedMs: Date.now() - phaseT }, 'enrich metadata done');
 
-  loadingState = { phase: 'fetching_collections', startedAt: Date.now(), progress: null };
+  shared.loadingState = { phase: 'fetching_collections', startedAt: Date.now(), progress: null };
   phaseT = Date.now();
   const collections = await listCollections();
   log.info(
@@ -129,7 +174,7 @@ async function runRefresh(): Promise<RefreshResult> {
     'fetch collections done',
   );
 
-  loadingState = {
+  shared.loadingState = {
     phase: 'persisting',
     startedAt: Date.now(),
     progress: { done: 0, total: movies.length + collections.length },
@@ -139,7 +184,7 @@ async function runRefresh(): Promise<RefreshResult> {
   await persistCollections(collections);
   log.info({ elapsedMs: Date.now() - phaseT }, 'persist done');
 
-  loadingState = { phase: 'embedding', startedAt: Date.now(), progress: { done: 0, total: 0 } };
+  shared.loadingState = { phase: 'embedding', startedAt: Date.now(), progress: { done: 0, total: 0 } };
   phaseT = Date.now();
   await syncEmbeddings(movies);
   log.info({ elapsedMs: Date.now() - phaseT }, 'embedding sync done');
@@ -225,9 +270,9 @@ async function syncEmbeddings(movies: PlexMovie[]): Promise<void> {
   const todo = movies.filter((m) => !have.has(m.ratingKey));
   if (todo.length === 0) return;
 
-  loadingState = {
+  shared.loadingState = {
     phase: 'embedding',
-    startedAt: loadingState?.startedAt ?? Date.now(),
+    startedAt: shared.loadingState?.startedAt ?? Date.now(),
     progress: { done: 0, total: todo.length },
   };
   const batch = 16;
@@ -249,9 +294,9 @@ async function syncEmbeddings(movies: PlexMovie[]): Promise<void> {
           updatedAt: sql`excluded.updated_at`,
         },
       });
-    loadingState = {
+    shared.loadingState = {
       phase: 'embedding',
-      startedAt: loadingState?.startedAt ?? Date.now(),
+      startedAt: shared.loadingState?.startedAt ?? Date.now(),
       progress: { done: Math.min(i + batch, todo.length), total: todo.length },
     };
   }
