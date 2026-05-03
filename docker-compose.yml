@@ -1,7 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: mise-ts-postgres
+    container_name: mise-postgres
     environment:
       POSTGRES_USER: mise
       POSTGRES_PASSWORD: mise
@@ -9,7 +9,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - mise_ts_pgdata:/var/lib/postgresql/data
+      - mise_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mise"]
       interval: 5s
@@ -20,7 +20,7 @@ services:
     build:
       context: .
       target: migrate
-    container_name: mise-ts-migrate
+    container_name: mise-migrate
     environment:
       DATABASE_URL: postgres://mise:mise@postgres:5432/mise
     depends_on:
@@ -32,7 +32,7 @@ services:
     build:
       context: .
       target: runner
-    container_name: mise-ts-app
+    container_name: mise-app
     env_file: .env
     environment:
       DATABASE_URL: postgres://mise:mise@postgres:5432/mise
@@ -42,7 +42,7 @@ services:
     volumes:
       # Persist the Hugging Face model cache so we don't redownload bge-small-en-v1.5
       # on every container restart.
-      - mise_ts_hfcache:/app/.cache/huggingface
+      - mise_hfcache:/app/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,5 +50,5 @@ services:
         condition: service_completed_successfully
 
 volumes:
-  mise_ts_pgdata:
-  mise_ts_hfcache:
+  mise_pgdata:
+  mise_hfcache:
