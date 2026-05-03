@@ -4,7 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import { anthropic } from '@ai-sdk/anthropic';
 import { tools } from './tools';
 
-export const DEFAULT_MODEL = 'claude-sonnet-4-5';
+export const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 export async function loadSystemPrompt(): Promise<string> {
   return (

@@ -1,7 +1,7 @@
 /**
  * Runaway-protection limits. All overridable via env so you can tune without
  * a redeploy. Defaults are intended for a single-user local Plex install on
- * Claude Sonnet 4.5 — adjust if you switch models or surface this on a network.
+ * Claude Sonnet 4.6 — adjust if you switch models or surface this on a network.
  */
 
 function envInt(name: string, fallback: number): number {

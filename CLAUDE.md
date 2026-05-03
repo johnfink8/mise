@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`mise` is a personal movie recommender for a single user's local Plex library. A Mastra-wrapped Anthropic agent (Sonnet 4.5 by default) calls tools that query a Postgres+pgvector mirror of the Plex catalog, then returns a JSON-validated set of recommendations the UI streams back to the browser.
+`mise` is a personal movie recommender for a single user's local Plex library. A Mastra-wrapped Anthropic agent (Sonnet 4.6 by default) calls tools that query a Postgres+pgvector mirror of the Plex catalog, then returns a JSON-validated set of recommendations the UI streams back to the browser.
 
 ## Common commands
 
@@ -70,4 +70,4 @@ The Mastra dev playground (`src/mastra/index.ts`) constructs its **own** agent i
 
 ## Tuning knobs (env vars)
 
-`MISE_CYCLE_TIMEOUT_MS`, `MISE_CYCLE_TOKEN_BUDGET`, `MISE_SESSION_TOKEN_CEILING`, `MISE_VALIDATION_RETRIES`, `MISE_AGENT_MAX_STEPS`, `MISE_THINKING_BUDGET_TOKENS`, `MISE_CATALOG_CRON` — all defined in `src/lib/limits.ts` with defaults tuned for single-user local use on Sonnet 4.5.
+`MISE_CYCLE_TIMEOUT_MS`, `MISE_CYCLE_TOKEN_BUDGET`, `MISE_SESSION_TOKEN_CEILING`, `MISE_VALIDATION_RETRIES`, `MISE_AGENT_MAX_STEPS`, `MISE_THINKING_BUDGET_TOKENS`, `MISE_CATALOG_CRON` — all defined in `src/lib/limits.ts` with defaults tuned for single-user local use on Sonnet 4.6.
