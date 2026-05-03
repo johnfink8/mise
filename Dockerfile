@@ -3,7 +3,7 @@
 FROM node:22-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm i
 
 # ---------- builder: compile Next standalone bundle ----------
 FROM node:22-slim AS builder
