@@ -69,6 +69,7 @@ class SessionBus {
   private emitters = new Map<string, EventEmitter>();
   private buffers = new Map<string, SessionEvent[]>();
   private closed = new Set<string>();
+  private cleanupTimers = new Map<string, NodeJS.Timeout>();
 
   private getOrCreate(sessionId: string): EventEmitter {
     let em = this.emitters.get(sessionId);
@@ -82,17 +83,31 @@ class SessionBus {
   }
 
   publish(sessionId: string, ev: SessionEvent): void {
+    // Publishing on a previously-closed session means a new cycle is starting.
+    // Reset buffered state so subscribers don't replay the prior cycle and
+    // bail out at its `done` event.
+    if (this.closed.has(sessionId)) {
+      this.closed.delete(sessionId);
+      this.buffers.set(sessionId, []);
+      const t = this.cleanupTimers.get(sessionId);
+      if (t) {
+        clearTimeout(t);
+        this.cleanupTimers.delete(sessionId);
+      }
+    }
     const em = this.getOrCreate(sessionId);
     this.buffers.get(sessionId)!.push(ev);
     em.emit('event', ev);
     if (ev.type === 'done' || ev.type === 'error') {
       this.closed.add(sessionId);
       // Keep buffer/emitter around briefly so late subscribers can drain.
-      setTimeout(() => {
+      const t = setTimeout(() => {
         this.emitters.delete(sessionId);
         this.buffers.delete(sessionId);
         this.closed.delete(sessionId);
+        this.cleanupTimers.delete(sessionId);
       }, 30_000);
+      this.cleanupTimers.set(sessionId, t);
     }
   }
 

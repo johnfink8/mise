@@ -96,18 +96,9 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
     onDone: () => setStreamDone(true),
   });
 
-  // Cycles include initial, persisted, and live so a fresh in-flight cycle still renders.
-  const cycles = useMemo(() => {
-    const set = new Set<number>([
-      ...recommendations.map((r) => r.cycle),
-      ...initial.toolCalls.map((t) => t.cycle),
-      ...initial.stepTexts.map((t) => t.cycle),
-      ...liveCalls.map((c) => c.cycle),
-      ...liveText.map((t) => t.cycle),
-    ]);
-    if (set.size === 0) set.add(0);
-    return [...set].sort((a, b) => a - b);
-  }, [recommendations, initial.toolCalls, initial.stepTexts, liveCalls, liveText]);
+  // Only the latest cycle is rendered — follow-ups replace prior turns.
+  const latestCycle = Math.max(0, initial.prompts.length - 1);
+  const cycles = [latestCycle];
 
   const onFeedback = (recId: string, fb: Feedback) => {
     setFeedbackOverrides((prev) => ({ ...prev, [recId]: fb }));
@@ -127,30 +118,31 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
         body: JSON.stringify({ prompt: text }),
       });
       if (!res.ok) throw new Error(`failed (${res.status})`);
+      // Reset stream state so isLive can flip back to true once the refreshed
+      // server data arrives with the new pending status, re-enabling the SSE
+      // subscription for the new cycle.
+      setStreamRecs([]);
+      setLiveCalls([]);
+      setLiveText([]);
+      setStreamFollowUps({});
+      setStreamDone(false);
+      setStreamError(null);
       router.refresh();
     } finally {
       setFollowUpBusy(false);
     }
   };
 
-  const liveCycle = isLive ? Math.max(...cycles) : null;
-  const totalRecCount = recommendations.length;
-
-  // PICK numbering offset per cycle — picks number consecutively across cycles.
-  const startIdxByCycle = new Map<number, number>();
-  let running = 0;
-  for (const c of cycles) {
-    startIdxByCycle.set(c, running);
-    running += recommendations.filter((r) => r.cycle === c).length;
-  }
+  const liveCycle = isLive ? latestCycle : null;
+  const visibleRecCount = recommendations.filter((r) => r.cycle === latestCycle).length;
 
   return (
     <div className="flex min-h-screen flex-col">
       <LobbyTopBar
         status={status}
-        resultCount={totalRecCount}
+        resultCount={visibleRecCount}
         showNew
-        showPlaylistShortcut={status === 'complete' && totalRecCount > 0}
+        showPlaylistShortcut={status === 'complete' && visibleRecCount > 0}
       />
 
       <div className="mx-auto w-full max-w-[980px] flex-1 px-5 pb-7 sm:px-7">
@@ -187,14 +179,14 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
               recs={cycleRecs}
               toolCalls={cycleToolCalls}
               stepTexts={cycleStepTexts}
-              startIdx={startIdxByCycle.get(c) ?? 0}
+              startIdx={0}
               onFeedback={onFeedback}
             />
           );
         })}
 
-        {status === 'complete' && totalRecCount > 0 && (
-          <SaveToPlex sessionId={initial.id} count={totalRecCount} />
+        {status === 'complete' && visibleRecCount > 0 && (
+          <SaveToPlex sessionId={initial.id} count={visibleRecCount} />
         )}
       </div>
 
