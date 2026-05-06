@@ -112,9 +112,34 @@ export function refreshFromPlex(opts: { force?: boolean } = {}): Promise<Refresh
   shared.refreshPromise = (async () => {
     try {
       if (!opts.force) {
+        // Resume path: a previous refresh persisted movies but didn't finish
+        // embedding them (e.g. the server was killed mid-run). Skip the
+        // expensive Plex fetch+enrich and just fill in the missing
+        // embeddings — the catalog rows themselves are recent enough.
+        const [movies, embedded] = await Promise.all([movieCount(), embeddedCount()]);
+        if (movies > 0 && embedded < movies) {
+          log.info({ movies, embedded }, 'partial embedding state — resuming');
+          shared.loadingState = {
+            phase: 'embedding',
+            startedAt: Date.now(),
+            progress: { done: embedded, total: movies },
+          };
+          await resumeEmbeddings();
+          // Mark fresh so the next caller doesn't immediately re-enter.
+          await db
+            .insert(catalogState)
+            .values({ id: 1, lastRefreshAt: new Date() })
+            .onConflictDoUpdate({
+              target: catalogState.id,
+              set: { lastRefreshAt: new Date() },
+            });
+          shared.lastRefresh = { attemptedAt, error: null };
+          return { count: movies };
+        }
+
         const age = await dataAgeSeconds();
         if (age !== null && age < 60 * 60 * 24) {
-          const result = { count: await movieCount() };
+          const result = { count: movies };
           shared.lastRefresh = { attemptedAt, error: null };
           return result;
         }
@@ -134,6 +159,64 @@ export function refreshFromPlex(opts: { force?: boolean } = {}): Promise<Refresh
     }
   })();
   return shared.refreshPromise;
+}
+
+/**
+ * Embed every catalog row that doesn't yet have a vector. Used both as the
+ * final step of a full refresh and as a standalone resume path after a server
+ * crash. Reads the needed fields from the movie table so it doesn't depend
+ * on Plex being reachable — partial embedding state is purely a local DB fix.
+ */
+async function resumeEmbeddings(): Promise<void> {
+  const todo = await db
+    .select({
+      ratingKey: movie.ratingKey,
+      title: movie.title,
+      year: movie.year,
+      genres: movie.genres,
+      summary: movie.summary,
+      directors: movie.directors,
+      topCast: movie.topCast,
+    })
+    .from(movie)
+    .leftJoin(movieEmbedding, eq(movieEmbedding.ratingKey, movie.ratingKey))
+    .where(sql`${movieEmbedding.ratingKey} IS NULL`);
+
+  if (todo.length === 0) return;
+
+  const startedAt = shared.loadingState?.startedAt ?? Date.now();
+  const total = todo.length;
+  shared.loadingState = {
+    phase: 'embedding',
+    startedAt,
+    progress: { done: 0, total },
+  };
+  const batch = 16;
+  for (let i = 0; i < todo.length; i += batch) {
+    const slice = todo.slice(i, i + batch);
+    const vecs = await embedMany(slice.map(buildEmbeddingText));
+    const rows = slice.map((m, j) => ({
+      ratingKey: m.ratingKey,
+      embedding: vecs[j],
+      updatedAt: new Date(),
+    }));
+    await db
+      .insert(movieEmbedding)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: movieEmbedding.ratingKey,
+        set: {
+          embedding: sql`excluded.embedding`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+      });
+    shared.loadingState = {
+      phase: 'embedding',
+      startedAt,
+      progress: { done: Math.min(i + batch, total), total },
+    };
+  }
+  log.info({ count: total }, 'resumeEmbeddings done');
 }
 
 async function runRefresh(): Promise<RefreshResult> {
@@ -186,7 +269,7 @@ async function runRefresh(): Promise<RefreshResult> {
 
   shared.loadingState = { phase: 'embedding', startedAt: Date.now(), progress: { done: 0, total: 0 } };
   phaseT = Date.now();
-  await syncEmbeddings(movies);
+  await resumeEmbeddings();
   log.info({ elapsedMs: Date.now() - phaseT }, 'embedding sync done');
 
   await db
@@ -260,46 +343,6 @@ async function persistCollections(
       updatedAt: new Date(),
     })),
   );
-}
-
-async function syncEmbeddings(movies: PlexMovie[]): Promise<void> {
-  const haveRows = await db
-    .select({ ratingKey: movieEmbedding.ratingKey })
-    .from(movieEmbedding);
-  const have = new Set(haveRows.map((r) => r.ratingKey));
-  const todo = movies.filter((m) => !have.has(m.ratingKey));
-  if (todo.length === 0) return;
-
-  shared.loadingState = {
-    phase: 'embedding',
-    startedAt: shared.loadingState?.startedAt ?? Date.now(),
-    progress: { done: 0, total: todo.length },
-  };
-  const batch = 16;
-  for (let i = 0; i < todo.length; i += batch) {
-    const slice = todo.slice(i, i + batch);
-    const vecs = await embedMany(slice.map(buildEmbeddingText));
-    const rows = slice.map((m, j) => ({
-      ratingKey: m.ratingKey,
-      embedding: vecs[j],
-      updatedAt: new Date(),
-    }));
-    await db
-      .insert(movieEmbedding)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: movieEmbedding.ratingKey,
-        set: {
-          embedding: sql`excluded.embedding`,
-          updatedAt: sql`excluded.updated_at`,
-        },
-      });
-    shared.loadingState = {
-      phase: 'embedding',
-      startedAt: shared.loadingState?.startedAt ?? Date.now(),
-      progress: { done: Math.min(i + batch, todo.length), total: todo.length },
-    };
-  }
 }
 
 export async function getMovie(ratingKey: string) {

@@ -43,11 +43,15 @@ export async function GET() {
   });
 }
 
-export async function POST() {
+export async function POST(req: Request) {
+  // Default to force:false so the kickoff picks the cheapest path:
+  //   - partial embedding state → resume embeddings only
+  //   - data fresh (<24h) → no-op
+  //   - otherwise → full refresh
+  // Pass `?force=1` to bypass both checks (hard re-fetch from Plex).
+  const force = new URL(req.url).searchParams.get('force') === '1';
   // Fire-and-forget: refreshFromPlex() sets loadingState synchronously, so the
-  // next GET will immediately reflect the in-flight refresh. We don't await
-  // here because a full refresh takes minutes and the client just wants to
-  // know the kickoff happened so it can start polling.
-  void refreshFromPlex({ force: true }).catch(() => undefined);
-  return NextResponse.json({ kicked_off: true });
+  // next GET will immediately reflect the in-flight refresh.
+  void refreshFromPlex({ force }).catch(() => undefined);
+  return NextResponse.json({ kicked_off: true, force });
 }

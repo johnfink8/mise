@@ -55,12 +55,18 @@ export function CatalogStatus() {
     };
   }, [active]);
 
-  // Auto-kickoff: if the catalog is empty and nothing has ever attempted a
-  // refresh, POST to start one. The endpoint is fire-and-forget so this
-  // returns immediately; the next poll will see loadingState set.
+  // Auto-kickoff fires in two cases:
+  //   1. Empty catalog with no prior attempt — first-run.
+  //   2. Partial embedding state with no in-flight refresh — usually means
+  //      the server was killed mid-embedding and the boot-time resume in
+  //      instrumentation.ts didn't fire (e.g. process restarted *after*
+  //      the route handlers loaded). Belt-and-suspenders.
   useEffect(() => {
     if (state === null || kickedOff.current) return;
-    if (state.count === 0 && !state.loading && !state.last_refresh) {
+    const empty = state.count === 0 && !state.loading && !state.last_refresh;
+    const stalledIndexing =
+      state.count > 0 && state.embedded < state.count && !state.loading;
+    if (empty || stalledIndexing) {
       kickedOff.current = true;
       fetch('/api/catalog', { method: 'POST' }).catch(() => undefined);
     }

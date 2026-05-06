@@ -24,7 +24,24 @@ export async function register(): Promise<void> {
     return;
   }
 
-  const { refreshFromPlex } = await import('./lib/catalog');
+  const { refreshFromPlex, movieCount, embeddedCount } = await import('./lib/catalog');
+
+  // Boot-time recovery: if the previous process was killed mid-embedding the
+  // catalog has movies but a partial vector index, and the UI is otherwise
+  // stuck displaying "Indexing in progress" with nothing actually working
+  // on it. refreshFromPlex({force:false}) detects this state and resumes
+  // the embedding loop without re-fetching from Plex.
+  void (async () => {
+    try {
+      const [movies, embedded] = await Promise.all([movieCount(), embeddedCount()]);
+      if (movies > 0 && embedded < movies) {
+        log.info({ movies, embedded }, 'partial embedding state at boot — resuming');
+        await refreshFromPlex({ force: false });
+      }
+    } catch (err) {
+      log.warn({ err }, 'boot-time embedding resume check failed');
+    }
+  })();
 
   schedule(catalogCron, async () => {
     const t0 = Date.now();
