@@ -8,6 +8,9 @@ import { refreshFromPlex } from '@/lib/catalog';
 import { limits } from '@/lib/limits';
 import { logger } from '@/lib/logger';
 import { buildPlayUrl, getMachineIdentifier } from '@/lib/plex';
+import { renderMemoriesBlock } from '@/lib/memory/render';
+import { generateMemory } from '@/lib/memory/generate';
+import { addMemory } from '@/lib/memory/store';
 
 export async function startSession(opts: {
   prompt: string;
@@ -89,8 +92,14 @@ async function runCycle(args: CycleArgs): Promise<void> {
 
     if (cycle === 0) await refreshFromPlex({ force: false }).catch(() => undefined);
 
+    // Cross-session context. Feedback note (liked/disliked picks) only at
+    // cycle 0 since it's already in priorMessages on follow-ups. Memories
+    // re-attached every cycle so newly-saved ones from after cycle 0 still
+    // reach the model.
     const note = cycle === 0 ? await buildFeedbackNote() : '';
-    const userContent = note ? `${note}\n\n---\n\n${userPrompt}` : userPrompt;
+    const memoriesBlock = await renderMemoriesBlock();
+    const parts = [memoriesBlock, note, userPrompt].filter((s) => s && s.length);
+    const userContent = parts.join('\n\n---\n\n');
 
     const { newMessages, output, toolCallsCount, inputTokens, outputTokens, stepTexts } =
       await runAgentCycle({
@@ -244,6 +253,40 @@ async function runCycle(args: CycleArgs): Promise<void> {
       data: { cycle, recommendations: hydrated, followUpSuggestion: followUp },
     });
     bus.publish(sessionId, { type: 'done', data: {} });
+
+    // Best-effort: ask a side model to look at this cycle and decide whether
+    // anything in the user's words is a durable taste signal worth remembering
+    // across sessions. Fire-and-forget — never blocks the response.
+    void (async () => {
+      try {
+        // `prev.prompts` already includes the current cycle's prompt — both
+        // startSession() and continueSession() persist it before runCycle runs.
+        const allPrompts = prev?.prompts ?? [userPrompt];
+        const picks = hydrated.map((h) => ({
+          title: h.title,
+          year: h.year,
+          group: h.group,
+          reasoning: h.reasoning,
+        }));
+        const memory = await generateMemory({
+          prompts: allPrompts,
+          latestCycle: allPrompts.length - 1,
+          picks,
+          playlistSummary,
+          followUpSuggestion: followUp,
+        });
+        if (memory) {
+          await addMemory({
+            text: memory,
+            sourceSessionId: sessionId,
+            sourceCycle: cycle,
+          });
+          log.info({ memory }, 'saved user memory');
+        }
+      } catch (err) {
+        log.warn({ err }, 'memory generation failed');
+      }
+    })();
     log.info(
       {
         elapsedMs: Date.now() - t0,

@@ -145,3 +145,17 @@ export const catalogState = pgTable('catalog_state', {
   id: integer('id').primaryKey(),
   lastRefreshAt: timestamp('last_refresh_at', { withTimezone: true }),
 });
+
+export const userMemory = pgTable(
+  'user_memory',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    text: text('text').notNull(),
+    sourceSessionId: uuid('source_session_id').references(() => session.id, {
+      onDelete: 'set null',
+    }),
+    sourceCycle: integer('source_cycle'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('user_memory_created_at_idx').on(t.createdAt)],
+);
