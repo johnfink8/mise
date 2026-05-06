@@ -8,8 +8,8 @@ declare global {
   var __miseSql: ReturnType<typeof postgres> | undefined;
 }
 
-const sql = globalThis.__miseSql ?? postgres(url, { max: 10 });
-if (process.env.NODE_ENV !== 'production') globalThis.__miseSql = sql;
+globalThis.__miseSql ??= postgres(url, { max: 10 });
+const sql = globalThis.__miseSql;
 
 export const db = drizzle(sql, { schema });
 export { sql };

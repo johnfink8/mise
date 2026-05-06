@@ -1,11 +1,8 @@
 import { bus } from '@/lib/event-bus';
+import { formatSSE, SSE_HEADERS } from '@/lib/sse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function sseLine(event: string, data: unknown): string {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-}
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -24,7 +21,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
       try {
         for await (const ev of bus.subscribe(id)) {
-          controller.enqueue(encoder.encode(sseLine(ev.type, ev.data)));
+          controller.enqueue(encoder.encode(formatSSE(ev)));
           if (ev.type === 'done' || ev.type === 'error') break;
         }
       } finally {
@@ -38,12 +35,5 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  });
+  return new Response(stream, { headers: SSE_HEADERS });
 }

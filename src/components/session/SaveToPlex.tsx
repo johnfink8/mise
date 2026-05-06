@@ -2,18 +2,14 @@
 
 import { useState } from 'react';
 import { Icon } from '@/components/Icon';
-
-interface PlaylistResult {
-  title: string;
-  ratingKey: string;
-  deepLink: string | null;
-  count: number;
-  created: boolean;
-}
+import {
+  savePlaylistAction,
+  type SavePlaylistResult,
+} from '@/app/actions/playlist';
 
 export function SaveToPlex({ sessionId, count }: { sessionId: string; count: number }) {
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<PlaylistResult | null>(null);
+  const [result, setResult] = useState<SavePlaylistResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onClick() {
@@ -21,15 +17,7 @@ export function SaveToPlex({ sessionId, count }: { sessionId: string; count: num
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/playlist`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const body = (await res.json()) as PlaylistResult & { error?: string };
-      if (!res.ok) {
-        setError(body.error ?? `failed (${res.status})`);
-        return;
-      }
+      const body = await savePlaylistAction({ sessionId });
       setResult(body);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

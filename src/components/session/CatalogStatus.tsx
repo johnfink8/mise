@@ -1,22 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { LoadingPhase } from '@/lib/catalog';
-
-interface CatalogSnapshot {
-  count: number;
-  embedded: number;
-  age_seconds: number | null;
-  loading: {
-    phase: LoadingPhase;
-    elapsed_seconds: number;
-    progress: { done: number; total: number } | null;
-  } | null;
-  last_refresh: {
-    attempted_seconds_ago: number;
-    error: string | null;
-  } | null;
-}
+import {
+  CatalogStreamEventSchema,
+  type CatalogSnapshot,
+} from '@/lib/catalog/snapshot';
+import { kickoffCatalogRefreshAction } from '@/app/actions/catalog';
 
 function isActive(s: CatalogSnapshot): boolean {
   return s.loading !== null || s.count === 0 || s.embedded < s.count;
@@ -24,35 +13,32 @@ function isActive(s: CatalogSnapshot): boolean {
 
 export function CatalogStatus() {
   const [state, setState] = useState<CatalogSnapshot | null>(null);
-  // Guard so we POST the auto-kickoff at most once per mount even if the
-  // first few polls all observe an empty catalog before the server flips
-  // loadingState in response to our POST.
+  // Guard so we kick off the auto-refresh at most once per mount even if the
+  // first few snapshots all observe an empty catalog before the server flips
+  // loadingState in response to our action.
   const kickedOff = useRef(false);
 
-  // Single source of truth for the catalog status: poll /api/catalog. Stop
-  // polling once everything is settled (count > 0 and fully embedded with
-  // no in-flight refresh) — useEffect re-runs and re-arms the interval if
-  // we ever go back to active.
+  // Subscribe to the catalog SSE stream while the catalog is "active"
+  // (refreshing, empty, or partially embedded). When everything settles, the
+  // effect tears the connection down; if state ever returns to active the
+  // effect re-runs and re-subscribes.
   const active = state === null || isActive(state);
   useEffect(() => {
     if (!active) return;
-    let cancelled = false;
-    async function fetchOnce() {
+    const es = new EventSource('/api/catalog/stream');
+    es.addEventListener('snapshot', (ev) => {
       try {
-        const res = await fetch('/api/catalog', { cache: 'no-store' });
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as CatalogSnapshot;
-        setState(data);
+        const data: unknown = JSON.parse((ev as MessageEvent).data);
+        const parsed = CatalogStreamEventSchema.safeParse({
+          type: 'snapshot',
+          data,
+        });
+        if (parsed.success) setState(parsed.data.data);
       } catch {
-        // transient — keep polling
+        // transient — keep streaming
       }
-    }
-    fetchOnce();
-    const id = window.setInterval(fetchOnce, 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
+    });
+    return () => es.close();
   }, [active]);
 
   // Auto-kickoff fires in two cases:
@@ -68,7 +54,7 @@ export function CatalogStatus() {
       state.count > 0 && state.embedded < state.count && !state.loading;
     if (empty || stalledIndexing) {
       kickedOff.current = true;
-      fetch('/api/catalog', { method: 'POST' }).catch(() => undefined);
+      void kickoffCatalogRefreshAction();
     }
   }, [state]);
 

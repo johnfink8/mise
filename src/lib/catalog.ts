@@ -65,17 +65,18 @@ declare global {
   var __miseCatalog: CatalogShared | undefined;
 }
 
-// Shared on globalThis so the page server-component, the /api/catalog route
-// handler, the cron tick in instrumentation.ts, and the agent's tools all see
-// the same in-flight refresh / last-attempt state. Without this, Next.js dev
-// (and any environment with multiple module instances) ends up with one
-// instance kicking off the refresh while another reports loadingState=null.
-const shared: CatalogShared = globalThis.__miseCatalog ?? {
+// Shared on globalThis so the page server-component, the SSE route, the cron
+// tick in instrumentation.ts, the catalog Server Action, and the agent's tools
+// all see the same in-flight refresh / last-attempt state. Without this,
+// duplicate module instances (Next dev HMR, separate Server Action chunks in
+// prod) end up with one instance kicking off the refresh while another
+// reports loadingState=null.
+globalThis.__miseCatalog ??= {
   refreshPromise: null,
   loadingState: null,
   lastRefresh: null,
 };
-if (process.env.NODE_ENV !== 'production') globalThis.__miseCatalog = shared;
+const shared: CatalogShared = globalThis.__miseCatalog;
 
 export function getLoadingState(): LoadingState | null {
   return shared.loadingState;

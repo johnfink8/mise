@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { anthropic } from '@ai-sdk/anthropic';
+import { z } from 'zod';
 import type { RecommendationOutputT } from '@/lib/agent/output';
 import { extractJsonObject } from '@/lib/agent/parse';
 import { logger } from '@/lib/logger';
@@ -86,18 +87,20 @@ interface MemoryParse {
   memory: string | null;
 }
 
+const MemoryShape = z.object({
+  memory: z.string().nullable().optional(),
+});
+
 function parseMemory(text: string): MemoryParse {
-  let obj: unknown;
+  let raw: unknown;
   try {
-    obj = extractJsonObject(text);
+    raw = extractJsonObject(text);
   } catch {
     return { memory: null };
   }
-  if (!obj || typeof obj !== 'object') return { memory: null };
-  const m = (obj as Record<string, unknown>).memory;
-  if (m === null || m === undefined) return { memory: null };
-  if (typeof m !== 'string') return { memory: null };
-  const trimmed = m.trim();
+  const parsed = MemoryShape.safeParse(raw);
+  if (!parsed.success) return { memory: null };
+  const trimmed = parsed.data.memory?.trim();
   if (!trimmed) return { memory: null };
   // Defensive cap so a runaway model can't dump a paragraph.
   return { memory: trimmed.slice(0, 280) };

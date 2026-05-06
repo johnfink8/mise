@@ -60,7 +60,7 @@ export default async function SessionDetailPage({
       cycle: t.cycle,
       turn: t.turn,
       toolName: t.toolName,
-      toolInput: t.toolInput as Record<string, unknown>,
+      toolInput: t.toolInput,
       durationMs: t.durationMs ?? 0,
     })),
     stepTexts: detail.session.stepTexts ?? [],

@@ -231,7 +231,7 @@ export async function runAgentCycle(args: {
           try {
             const r = await reader.read();
             if (r.done) break;
-            chunk = r.value as BaseChunk;
+            chunk = r.value;
           } catch (err) {
             if (abortReason) throw new CycleAbortError(abortReason);
             throw err;

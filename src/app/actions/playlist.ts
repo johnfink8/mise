@@ -1,12 +1,21 @@
-import { NextResponse } from 'next/server';
+'use server';
+
+import { z } from 'zod';
 import { getSessionDetail } from '@/lib/sessions/queries';
 import { upsertMoviePlaylist } from '@/lib/plex';
 import { logger } from '@/lib/logger';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 const TITLE_PREFIX = 'mise · ';
+
+export interface SavePlaylistResult {
+  title: string;
+  ratingKey: string;
+  deepLink: string | null;
+  count: number;
+  created: boolean;
+}
+
+const Input = z.object({ sessionId: z.string().min(1) });
 
 /**
  * Create-or-update mise's singleton Plex playlist using the latest cycle's
@@ -14,21 +23,17 @@ const TITLE_PREFIX = 'mise · ';
  * upsertMoviePlaylist — so any past session's playlist gets rewritten and
  * duplicates are pruned.
  */
-export async function POST(
-  _req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
-  const { id } = await ctx.params;
-  const log = logger.child({ sessionId: id, action: 'upsert_playlist' });
+export async function savePlaylistAction(
+  input: z.input<typeof Input>,
+): Promise<SavePlaylistResult> {
+  const { sessionId } = Input.parse(input);
+  const log = logger.child({ sessionId, action: 'upsert_playlist' });
 
-  const detail = await getSessionDetail(id);
-  if (!detail) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  const detail = await getSessionDetail(sessionId);
+  if (!detail) throw new Error('not found');
 
   if (detail.recommendations.length === 0) {
-    return NextResponse.json(
-      { error: 'session has no recommendations' },
-      { status: 400 },
-    );
+    throw new Error('session has no recommendations');
   }
 
   const latestCycle = Math.max(...detail.recommendations.map((r) => r.cycle));
@@ -55,16 +60,15 @@ export async function POST(
       },
       result.created ? 'plex playlist created' : 'plex playlist updated',
     );
-    return NextResponse.json({
+    return {
       title: result.title,
       ratingKey: result.ratingKey,
       deepLink: result.deepLink,
       count: ratingKeys.length,
       created: result.created,
-    });
+    };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     log.warn({ err }, 'plex playlist upsert failed');
-    return NextResponse.json({ error: message }, { status: 502 });
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }

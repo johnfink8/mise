@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import {
+  SessionEventSchema,
+  type SessionEvent,
+} from '@/lib/sessions/events';
 import type { LiveToolCall, RecOut, StepText } from './types';
 
 interface StreamHandlers {
@@ -21,6 +25,16 @@ interface StreamHandlers {
 interface Options extends StreamHandlers {
   sessionId: string;
   enabled: boolean;
+}
+
+function parseEvent(type: string, raw: string): SessionEvent | null {
+  try {
+    const data: unknown = JSON.parse(raw);
+    const parsed = SessionEventSchema.safeParse({ type, data });
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -64,40 +78,61 @@ export function useSessionStream({
     let sawDone = false;
     handlersRef.current.onOpen?.();
 
-    es.addEventListener('assistant_text', (ev) => {
-      const d = JSON.parse((ev as MessageEvent).data) as StepText;
-      handlersRef.current.onAssistantText(d);
-    });
-    es.addEventListener('tool_call_started', (ev) => {
-      const d = JSON.parse((ev as MessageEvent).data) as Omit<LiveToolCall, 'done'>;
-      handlersRef.current.onToolCallStarted(d);
-    });
-    es.addEventListener('tool_call_completed', (ev) => {
-      const d = JSON.parse((ev as MessageEvent).data) as Omit<LiveToolCall, 'done'>;
-      handlersRef.current.onToolCallCompleted(d);
-    });
-    es.addEventListener('recommendations_ready', (ev) => {
-      const d = JSON.parse((ev as MessageEvent).data) as {
-        cycle: number;
-        recommendations: RecOut[];
-        followUpSuggestion: string | null;
-      };
-      handlersRef.current.onRecommendationsReady(d);
-    });
-    es.addEventListener('error', (ev) => {
-      try {
-        const d = JSON.parse((ev as MessageEvent).data) as { message: string };
-        handlersRef.current.onError(d.message);
-      } catch {
-        // Native browser onerror also fires here without a data payload — ignore
-        // unless we already saw `done`, in which case close the now-stale conn.
-        if (sawDone) es.close();
+    const dispatch = (ev: SessionEvent) => {
+      const h = handlersRef.current;
+      switch (ev.type) {
+        case 'assistant_text':
+          h.onAssistantText(ev.data);
+          break;
+        case 'tool_call_started':
+          h.onToolCallStarted(ev.data);
+          break;
+        case 'tool_call_completed':
+          h.onToolCallCompleted(ev.data);
+          break;
+        case 'recommendations_ready':
+          h.onRecommendationsReady(ev.data);
+          break;
+        case 'error':
+          h.onError(ev.data.message);
+          break;
+        case 'done':
+          sawDone = true;
+          es.close();
+          h.onDone();
+          break;
+        case 'started':
+          // No-op: existence implied by other events.
+          break;
       }
-    });
-    es.addEventListener('done', () => {
-      sawDone = true;
-      es.close();
-      handlersRef.current.onDone();
+    };
+
+    const named = [
+      'started',
+      'assistant_text',
+      'tool_call_started',
+      'tool_call_completed',
+      'recommendations_ready',
+    ] as const;
+    for (const type of named) {
+      es.addEventListener(type, (ev) => {
+        const parsed = parseEvent(type, (ev as MessageEvent).data);
+        if (parsed) dispatch(parsed);
+      });
+    }
+    es.addEventListener('done', () => dispatch({ type: 'done', data: {} }));
+
+    es.addEventListener('error', (ev) => {
+      // SSE 'error' events come in two flavors: server-emitted (with a JSON
+      // payload) and the native EventSource transport error (no data). Only
+      // the first should surface as a session error.
+      const data = (ev as MessageEvent).data;
+      if (typeof data === 'string' && data.length > 0) {
+        const parsed = parseEvent('error', data);
+        if (parsed && parsed.type === 'error') dispatch(parsed);
+        return;
+      }
+      if (sawDone) es.close();
     });
 
     return () => es.close();

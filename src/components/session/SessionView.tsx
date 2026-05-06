@@ -8,6 +8,8 @@ import { LobbyTurn } from './LobbyTurn';
 import { SaveToPlex } from './SaveToPlex';
 import { ThinkingBlock } from './ThinkingBlock';
 import { useSessionStream } from './useSessionStream';
+import { continueSessionAction } from '@/app/actions/sessions';
+import { recordFeedbackAction } from '@/app/actions/feedback';
 import type {
   Feedback,
   LiveToolCall,
@@ -102,22 +104,13 @@ export default function SessionView({ initial }: { initial: SessionViewData }) {
 
   const onFeedback = (recId: string, fb: Feedback) => {
     setFeedbackOverrides((prev) => ({ ...prev, [recId]: fb }));
-    void fetch(`/api/recommendations/${recId}/feedback`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ feedback: fb }),
-    });
+    void recordFeedbackAction({ recommendationId: recId, feedback: fb });
   };
 
   const onFollowUp = async (text: string) => {
     setFollowUpBusy(true);
     try {
-      const res = await fetch(`/api/sessions/${initial.id}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text }),
-      });
-      if (!res.ok) throw new Error(`failed (${res.status})`);
+      await continueSessionAction({ sessionId: initial.id, prompt: text });
       // Reset stream state so isLive can flip back to true once the refreshed
       // server data arrives with the new pending status, re-enabling the SSE
       // subscription for the new cycle.

@@ -1,69 +1,7 @@
 import { EventEmitter } from 'node:events';
+import type { SessionEvent } from './sessions/events';
 
-interface StartedData {
-  sessionId: string;
-  cycle: number;
-}
-
-interface AssistantTextData {
-  cycle: number;
-  turn: number;
-  text: string;
-}
-
-interface ToolCallStartedData {
-  cycle: number;
-  turn: number;
-  toolName: string;
-  toolInput: Record<string, unknown>;
-}
-
-interface ToolCallCompletedData extends ToolCallStartedData {
-  toolOutput: unknown;
-  durationMs: number;
-}
-
-export interface RecommendationsReadyRec {
-  id: string;
-  cycle: number;
-  position: number;
-  ratingKey: string;
-  title: string;
-  year: number | null;
-  genres: string[];
-  runtimeMin: number | null;
-  audienceRating: number | null;
-  directors: string[];
-  topCast: string[];
-  reasoning: string;
-  group: string | null;
-  feedback: 'none' | 'up' | 'down' | 'watched';
-  playUrl: string | null;
-}
-
-interface RecommendationsReadyData {
-  cycle: number;
-  recommendations: RecommendationsReadyRec[];
-  followUpSuggestion: string | null;
-}
-
-interface ErrorData {
-  cycle: number;
-  message: string;
-}
-
-type DoneData = Record<string, never>;
-
-export type SessionEvent =
-  | { type: 'started'; data: StartedData }
-  | { type: 'assistant_text'; data: AssistantTextData }
-  | { type: 'tool_call_started'; data: ToolCallStartedData }
-  | { type: 'tool_call_completed'; data: ToolCallCompletedData }
-  | { type: 'recommendations_ready'; data: RecommendationsReadyData }
-  | { type: 'error'; data: ErrorData }
-  | { type: 'done'; data: DoneData };
-
-export type SessionEventType = SessionEvent['type'];
+export type { SessionEvent, SessionEventType, RecommendationsReadyRec } from './sessions/events';
 
 class SessionBus {
   private emitters = new Map<string, EventEmitter>();
@@ -165,5 +103,5 @@ declare global {
   var __miseBus: SessionBus | undefined;
 }
 
-export const bus: SessionBus = globalThis.__miseBus ?? new SessionBus();
-if (process.env.NODE_ENV !== 'production') globalThis.__miseBus = bus;
+globalThis.__miseBus ??= new SessionBus();
+export const bus: SessionBus = globalThis.__miseBus;
