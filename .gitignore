@@ -12,3 +12,4 @@ next-env.d.ts
 docs/plans
 *.tsbuildinfo
 .mastra
+.tmp/

@@ -1,0 +1,89 @@
+name: mise-test
+
+services:
+  postgres-test:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: mise
+      POSTGRES_PASSWORD: mise
+      POSTGRES_DB: mise_test
+    # No volume on purpose — every `up` starts from a fresh database.
+    # No host port published — only reachable from the compose network so this
+    # never collides with the dev `npm run db:up` postgres on :5433.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mise -d mise_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  migrate-test:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: postgres://mise:mise@postgres-test:5432/mise_test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    restart: "no"
+
+  aimock:
+    image: ghcr.io/copilotkit/aimock:latest
+    command: ["-f", "/fixtures/happy-path.json", "-h", "0.0.0.0", "--log-level", "debug"]
+    volumes:
+      - ./tests/e2e/fixtures/aimock:/fixtures:ro
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:4010/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  fake-plex:
+    build:
+      context: ./tests/e2e/fake-plex
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:8421/identity',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  mise-app:
+    build:
+      context: .
+      target: runner
+    environment:
+      DATABASE_URL: postgres://mise:mise@postgres-test:5432/mise_test
+      ANTHROPIC_BASE_URL: http://aimock:4010/v1
+      ANTHROPIC_API_KEY: test-mock-key
+      PLEX_BASE_URL: http://fake-plex:8421
+      PLEX_TOKEN: test-token
+      MISE_CATALOG_CRON: "off"
+      MISE_CYCLE_TIMEOUT_MS: "60000"
+      MISE_VALIDATION_RETRIES: "1"
+      # Disable extended thinking — aimock doesn't model thinking blocks and
+      # they aren't part of what these tests cover.
+      MISE_THINKING_BUDGET_TOKENS: "0"
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      migrate-test:
+        condition: service_completed_successfully
+      aimock:
+        condition: service_healthy
+      fake-plex:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  playwright:
+    build:
+      context: ./tests/e2e
+    environment:
+      PLAYWRIGHT_BASE_URL: http://mise-app:3000
+    depends_on:
+      mise-app:
+        condition: service_healthy

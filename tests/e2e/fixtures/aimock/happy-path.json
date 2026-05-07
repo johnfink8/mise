@@ -1,0 +1,31 @@
+{
+  "fixtures": [
+    {
+      "match": { "toolCallId": "call_search_init" },
+      "response": {
+        "content": "Five quiet picks tied to that mood — characters, slowness, and warmth over plot.\n\n```json\n{\"recommendations\":[{\"rating_key\":\"1\",\"reasoning\":\"A retired clockmaker reconnecting with his daughter — the slowest possible kind of warm.\"},{\"rating_key\":\"2\",\"reasoning\":\"Two widowed neighbours rediscovering joy through letters and herbs; deeply gentle.\"},{\"rating_key\":\"3\",\"reasoning\":\"A small-town bakery navigating a quiet season — comfort food in movie form.\"},{\"rating_key\":\"5\",\"reasoning\":\"A lighthouse keeper and a ferry captain in the off-season; lonely and tender.\"},{\"rating_key\":\"10\",\"reasoning\":\"Three siblings, one last cider press at the family orchard. Wistful and warm.\"}],\"playlist_title\":\"quiet thursday\",\"playlist_summary\":\"Five low-stakes, character-first films for a slow evening — clockmakers, lighthouse keepers, and a bakery navigating a quiet season.\",\"follow_up_suggestion\":\"shorter than 100 minutes\"}\n```"
+      }
+    },
+    {
+      "match": { "userMessage": "shorter than 100 minutes" },
+      "response": {
+        "content": "Tightening the runtime — five reshuffles all under the threshold.\n\n```json\n{\"recommendations\":[{\"rating_key\":\"36\",\"reasoning\":\"86 minutes; charming and tight grocery-store comedy.\"},{\"rating_key\":\"35\",\"reasoning\":\"89 minutes; gentle and small-scale music story.\"},{\"rating_key\":\"38\",\"reasoning\":\"88 minutes; brisk restaurant-opening comedy with heart.\"},{\"rating_key\":\"31\",\"reasoning\":\"88 minutes; warm suburban-feud comedy that wraps fast.\"},{\"rating_key\":\"9\",\"reasoning\":\"88 minutes; coastal-village radio repair shop comfort.\"}],\"playlist_title\":\"under one hundred\",\"playlist_summary\":\"Five short, warm picks under 100 minutes — comedies and comforts that won't outlast a tea.\",\"follow_up_suggestion\":\"only the comedies\"}\n```"
+      }
+    },
+    {
+      "match": { "userMessage": "cozy thursday" },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_search_init",
+            "name": "search_movies",
+            "arguments": {
+              "query": "comforting warm low-stakes contemplative quiet",
+              "limit": 25
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

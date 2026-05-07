@@ -15,7 +15,9 @@
     "db:migrate": "node --experimental-strip-types --no-warnings scripts/migrate.ts",
     "mastra:dev": "mastra dev --dir src/mastra",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "bash tests/e2e/run.sh",
+    "test:e2e:down": "docker compose -f docker-compose.test.yml down --remove-orphans"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.74",

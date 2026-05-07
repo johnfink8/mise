@@ -10,3 +10,6 @@ docs
 smoke.json
 smoke.log
 README.md
+tests
+playwright-report
+test-results
